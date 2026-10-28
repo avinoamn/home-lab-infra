@@ -13,6 +13,13 @@ updates:
     schedule: {interval: weekly}
     groups:
       tools-images: {patterns: ["*"]}
+    # These follow other pins and are upgraded by hand, together with them (docs/operations.md, "Tools on the
+    # node"): Helm and Helmfile match the versions on the node, and promtool matches the Prometheus that
+    # kube-prometheus-stack runs. A bump of only the tools image would check against the wrong versions.
+    ignore:
+      - dependency-name: alpine/helm
+      - dependency-name: ghcr.io/helmfile/helmfile
+      - dependency-name: prom/prometheus
   - package-ecosystem: pip
     directory: /ci
     schedule: {interval: weekly}
