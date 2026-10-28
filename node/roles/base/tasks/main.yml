@@ -1,0 +1,32 @@
+# Ubuntu as it was installed: a few packages, security updates applied automatically, ufw installed but off.
+# SSH is not managed yet: it runs with Ubuntu's defaults (docs/decisions.md, "The node").
+
+- name: Base packages are installed
+  become: true
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 86400   # unattended-upgrades refreshes the lists daily, so a check run does not
+
+- name: Security updates are installed automatically (Ubuntu's defaults)
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: The ufw package is installed
+  become: true
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+- name: The ufw firewall stays off (turning it on is a separate, reviewed change)
+  become: true
+  community.general.ufw:
+    state: disabled

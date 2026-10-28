@@ -20,7 +20,7 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 
 | Piece | Namespace | Defined today | Moves here in |
 |---|---|---|---|
-| The node (Ubuntu, Tailscale, k3s) | | installed by hand | [#2](../../issues/2) |
+| The node (Ubuntu, Tailscale, k3s) | | **this repository**, [`node/`](node/) (Ansible) | done ([#2](../../issues/2)) |
 | Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | **this repository**, [`platform/monitoring/`](platform/monitoring/) | done ([#3](../../issues/3)) |
 | Namespace and `deployer` account for each project | `tickertape` | **this repository**, [`projects/`](projects/) | done ([#4](../../issues/4)) |
 | uptime-kuma (Helm release `uptime-kuma`) | `tools` | **this repository**, [`platform/uptime-kuma/`](platform/uptime-kuma/) (its monitors: [docs/operations.md](docs/operations.md#uptime-kuma)) | done ([#5](../../issues/5)) |

@@ -1,0 +1,4 @@
+# Ansible collections the node playbook uses (node/), installed into the tools image at a pinned version.
+collections:
+  - name: community.general    # community.general.ufw: keeps ufw as it is
+    version: 13.5.0

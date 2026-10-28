@@ -1,0 +1,35 @@
+# k3s, single server, installed with its own install script from the pinned release, with no flags: Traefik,
+# local-path, metrics-server, CoreDNS and the network policy controller are all on. The script runs only when k3s
+# is missing or at another version, so a check run on the live node changes nothing.
+# Upgrading: bump k3s_version and k3s_install_script_sha256 (docs/operations.md, "Upgrading k3s").
+
+- name: Read the installed k3s version
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  register: k3s_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install or upgrade k3s
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+  block:
+    - name: Download the install script of the pinned release
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version | urlencode }}/install.sh"
+        dest: /tmp/k3s-install.sh
+        checksum: "sha256:{{ k3s_install_script_sha256 }}"
+        mode: "0755"
+
+    - name: Run it (the script downloads and verifies the k3s binary and writes the systemd unit)
+      become: true
+      ansible.builtin.command: /tmp/k3s-install.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+      changed_when: true
+
+- name: The k3s service runs and starts at boot
+  become: true
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started

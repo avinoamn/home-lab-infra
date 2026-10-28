@@ -1,0 +1,105 @@
+# The tools scripts/helmfile.sh runs on the node: Helm (for everyone, in /usr/local/bin), and Helmfile and the
+# helm-diff plugin in the admin user's home. Each is downloaded and checksum-verified only when it is missing or at
+# another version.
+
+- name: Read the installed Helm version
+  ansible.builtin.command: /usr/local/bin/helm version --short
+  register: node_tools_helm
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Helm
+  when: not (node_tools_helm.stdout | default('')).startswith(helm_version + '+')
+  block:
+    - name: Download Helm
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /tmp/helm.tar.gz
+        checksum: "sha256:{{ helm_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack it
+      ansible.builtin.unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Put it in /usr/local/bin
+      become: true
+      ansible.builtin.copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+- name: Read the installed Helmfile version
+  ansible.builtin.command: "{{ ansible_env.HOME }}/.local/bin/helmfile version --output short"
+  register: node_tools_helmfile
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Helmfile
+  when: (node_tools_helmfile.stdout | default('') | trim) != helmfile_version
+  vars:
+    node_tools_helmfile_release: "https://github.com/helmfile/helmfile/releases/download/v{{ helmfile_version }}"
+  block:
+    - name: Download Helmfile
+      ansible.builtin.get_url:
+        url: "{{ node_tools_helmfile_release }}/helmfile_{{ helmfile_version }}_linux_amd64.tar.gz"
+        dest: /tmp/helmfile.tar.gz
+        checksum: "sha256:{{ helmfile_sha256 }}"
+        mode: "0644"
+
+    - name: Make sure ~/.local/bin exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.local/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Unpack Helmfile into ~/.local/bin
+      ansible.builtin.unarchive:
+        src: /tmp/helmfile.tar.gz
+        dest: "{{ ansible_env.HOME }}/.local/bin"
+        remote_src: true
+        include: [helmfile]
+
+- name: Read the installed helm-diff version
+  ansible.builtin.command: /usr/local/bin/helm plugin list
+  register: node_tools_plugins
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the helm-diff plugin
+  when: >-
+    not (node_tools_plugins.stdout | default('')
+         | regex_search('^diff\s+' + helm_diff_version | regex_escape + '\s', multiline=True))
+  block:
+    - name: Download helm-diff
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/databus23/helm-diff/releases/download/v{{ helm_diff_version }}/helm-diff-linux-amd64.tgz
+        dest: /tmp/helm-diff.tgz
+        checksum: "sha256:{{ helm_diff_sha256 }}"
+        mode: "0644"
+
+    - name: Remove an older helm-diff
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.local/share/helm/plugins/diff"
+        state: absent
+
+    - name: Make sure Helm's plugin directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.local/share/helm/plugins"
+        state: directory
+        mode: "0755"
+
+    - name: Unpack helm-diff into Helm's plugin directory (Helm 3 would only link a local directory)
+      ansible.builtin.unarchive:
+        src: /tmp/helm-diff.tgz
+        dest: "{{ ansible_env.HOME }}/.local/share/helm/plugins"
+        remote_src: true

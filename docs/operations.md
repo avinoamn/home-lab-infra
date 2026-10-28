@@ -20,11 +20,56 @@ Read-only commands (`get`, `describe`, `logs`, `helmfile diff`) are always safe.
 
 | Tool | Version | Where |
 |---|---|---|
-| Helm | v3.21.2 | `/usr/local/bin/helm` (installed with the node) |
+| Helm | v3.21.2 | `/usr/local/bin/helm` |
 | Helmfile | 1.8.2 | `~/.local/bin/helmfile` |
 | helm-diff plugin | 3.15.15 | `~/.local/share/helm/plugins/diff` |
 
-`scripts/install-node-tools.sh` installs Helmfile and helm-diff at the pinned versions, checksum-verified and without sudo. Re-running it is safe. When the node is managed by Ansible ([#2](../../../issues/2)), Ansible installs them instead, at the same paths. The tools image in CI (`ci/Dockerfile`) uses the same Helm and Helmfile versions; upgrade them together. Its `promtool` likewise matches the Prometheus version kube-prometheus-stack runs. Dependabot skips these three (`.github/dependabot.yml`), so they move only with the node or the monitoring stack. It keeps proposing the tools that stand alone (Python, shellcheck, kubeconform, yamllint).
+The node's Ansible playbook installs them at the pinned versions (`node/group_vars/all.yml`), checksum-verified (see "The node" below). The tools image in CI (`ci/Dockerfile`) uses the same Helm and Helmfile versions; upgrade them together. Its `promtool` likewise matches the Prometheus version kube-prometheus-stack runs. Dependabot skips these three (`.github/dependabot.yml`), so they move only with the node or the monitoring stack. It keeps proposing the tools that stand alone (Python, shellcheck, kubeconform, yamllint).
+
+## The node
+
+The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools and the admin kubeconfig. Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
+
+```sh
+scripts/node.sh check    # read-only: what a run would change (--check --diff). Expect changed=0.
+scripts/node.sh apply    # changes the node: run check first, and only after the change is merged
+```
+
+Each run is logged to `node-run.log` (git-ignored). The playbook captures the node as it was installed:
+
+- **Not managed yet:** SSH runs with Ubuntu's defaults (password login allowed, root by key only). ufw is installed and stays off. Hardening either is a separate, reviewed change.
+- **Install steps run only when needed:** k3s, Helm, Helmfile and helm-diff are installed only when missing or at another version. A run on an up-to-date node only checks them.
+
+### Upgrading k3s
+
+Upgrade one minor version at a time ([decisions.md](decisions.md), "The platform contract"), about once a quarter or when a fix is needed:
+
+1. Read the release notes of the new version, and of every minor version in between, for removed APIs and changed defaults.
+2. On a branch, set `k3s_version` in `node/group_vars/all.yml`, and `k3s_install_script_sha256` to the checksum of that tag's `install.sh`:
+
+   ```sh
+   curl -sL https://raw.githubusercontent.com/k3s-io/k3s/<version, with + as %2B>/install.sh | sha256sum
+   ```
+
+3. `scripts/node.sh check` should show only the two install steps.
+4. After merge, when the projects are quiet: `scripts/node.sh apply`. The install script replaces the binary and restarts k3s. Running pods keep running during the restart, but the API is down for a minute.
+5. Check the node is Ready, every pod is running, and the dashboards and uptime-kuma are green ("Checking that it works" below).
+
+k3s's certificates are valid for a year and are renewed only when k3s starts within 120 days of their expiry. An upgrade restarts k3s, so upgrading regularly also renews them. "The API certificate" below covers the alert if that doesn't happen.
+
+### Installing a node from scratch
+
+For a new or rebuilt server (disaster recovery is [#9](../../../issues/9)):
+
+1. **Install Ubuntu 24.04 LTS Server** (x86_64). Create the admin user with sudo, and add your SSH public key to its `~/.ssh/authorized_keys`.
+2. **On your laptop,** point the `Host computa` entry in `~/.ssh/config` at the new address (HostName, User, IdentityFile), and check that `ssh computa true` works.
+3. **`scripts/node.sh check`, then `scripts/node.sh apply`.** It installs the packages, Tailscale, k3s (with the cluster's bundled Traefik, local-path storage, CoreDNS and metrics-server), the admin tools and the admin kubeconfig. Run `check` again afterwards: it should show `changed=0`.
+4. **Join the tailnet by hand:** `sudo tailscale up` on the node and log in. Then, in the admin console: tag the machine `tag:k3s`, disable its key expiry, and remove the old machine. The Tailscale policy then applies to it ("Tailscale policy" below).
+5. **Put the cluster back** with this repository:
+   - `scripts/create-monitoring-secrets.sh`
+   - `scripts/helmfile.sh apply`
+   - `scripts/projects.sh apply <project>` for each project
+6. Projects deploy themselves again. Their data comes back from backups ([#9](../../../issues/9)).
 
 ## Applying a change
 

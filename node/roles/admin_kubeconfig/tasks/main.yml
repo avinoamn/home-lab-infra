@@ -1,0 +1,24 @@
+# The admin kubeconfig: a copy of k3s's own, for the SSH user, so admin kubectl and Helm run without sudo. It stays
+# on the node (docs/decisions.md). k3s rewrites its copy when it starts, and this copy follows it on the next run.
+
+- name: ~/.kube exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: "0775"
+
+- name: The admin kubeconfig is a copy of k3s's
+  become: true
+  diff: false   # its content holds the cluster's admin credentials: never print it
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ ansible_env.HOME }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user_id }}"
+    group: root
+    mode: "0600"
+
+- name: Interactive shells use it
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: export KUBECONFIG=~/.kube/config

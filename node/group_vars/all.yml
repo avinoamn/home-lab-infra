@@ -1,0 +1,32 @@
+# Every version the node runs, pinned. Upgrading one is a change to this file (docs/operations.md, "The node").
+
+# k3s: installed with its install script from the same release tag, with no flags (the defaults).
+k3s_version: v1.36.2+k3s1
+k3s_install_script_sha256: 46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad
+
+# Tailscale, from Tailscale's apt repository.
+tailscale_version: 1.102.4
+tailscale_apt_distro: noble
+# The repository's signing key, pinned: a changed key fails the download instead of being trusted silently.
+tailscale_keyring_sha256: 3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39
+
+# The admin tools that scripts/helmfile.sh runs on the node. Keep Helm and Helmfile in step with ci/Dockerfile.
+helm_version: v3.21.2
+helm_sha256: 0a745198de24545d0055cd8414bc8d2ba10363ef5f5d38369ea1b399671cc083
+helmfile_version: 1.8.2
+helmfile_sha256: f179485c5bb9f8e20fbd8ea16d8807915988aba4d60131ee864fb3232452716e
+helm_diff_version: 3.15.15
+helm_diff_sha256: 504e99410611daa70702362e1b10dc74929df8a912cb3f6b5d21d1ee9d0cb7d9
+
+# Packages the node's own work relies on, besides what Ubuntu installs. open-iscsi is not needed by local-path,
+# but it was installed with the node and is kept so nothing changes.
+base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - htop
+  - jq
+  - open-iscsi
+  - python3
+  - unattended-upgrades
+  - vim
