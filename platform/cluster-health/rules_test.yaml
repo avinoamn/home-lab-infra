@@ -1,0 +1,131 @@
+# Unit tests for rules.yaml: `promtool test rules rules_test.yaml`, run by `make check`. Each test feeds made-up
+# series and checks which alerts fire, with exactly which labels and annotations.
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+
+tests:
+  # The root filesystem loses 100 MB a minute: from 150 GB of 500 GB it would be empty in about 19 hours.
+  # /boot is nearly full but steady, so only the rate-based alert on / fires, and only after its 1h `for`
+  # (it predicts empty within 24h from minute 60 on; predict_linear does not wait for 6 hours of history).
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '150000000000-100000000x480'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '500000000000x480'
+      - series: 'node_filesystem_readonly{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '0x480'
+      - series: 'node_filesystem_avail_bytes{mountpoint="/boot", fstype="ext4", instance="n"}'
+        values: '200000000x480'
+      - series: 'node_filesystem_size_bytes{mountpoint="/boot", fstype="ext4", instance="n"}'
+        values: '2000000000x480'
+      - series: 'node_filesystem_readonly{mountpoint="/boot", fstype="ext4", instance="n"}'
+        values: '0x480'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: NodeFilesystemFillingUp
+        exp_alerts: []
+      - eval_time: 2h30m
+        alertname: NodeFilesystemFillingUp
+        exp_alerts:
+          - exp_labels: {severity: warning, mountpoint: /, fstype: ext4, instance: n}
+            exp_annotations:
+              summary: / will be full within a day at the current rate
+              description: >-
+                It is filling fast enough to run out within 24 hours, and every project's volumes are on it. The
+                Node dashboard shows what grows.
+      - eval_time: 2h30m
+        alertname: NodeFilesystemAlmostFull
+        exp_alerts: []
+
+  # A disk at 3% free fires the absolute alert after 10 minutes, rate or not.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '15000000000x30'
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '500000000000x30'
+      - series: 'node_filesystem_readonly{mountpoint="/", fstype="ext4", instance="n"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NodeFilesystemAlmostFull
+        exp_alerts:
+          - exp_labels: {severity: critical, mountpoint: /, fstype: ext4, instance: n}
+            exp_annotations:
+              summary: / has less than 5% free (3%)
+
+  # An OOM kill, a dead node-exporter and a node that is not Ready.
+  - interval: 1m
+    input_series:
+      - series: 'node_vmstat_oom_kill{instance="n"}'
+        values: '4 4 4 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5'
+      - series: 'up{job="node-exporter", instance="n"}'
+        values: '1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'up{job="kube-state-metrics", instance="k"}'
+        values: '1x20'
+      - series: 'kube_node_status_condition{node="n1", condition="Ready", status="true"}'
+        values: '1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NodeOOMKill
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: n}
+            exp_annotations:
+              summary: The kernel killed a process for lack of memory
+              description: >-
+                A container hit its memory limit or the node ran out. "OOMKilled containers" on the Node dashboard
+                shows which one.
+      - eval_time: 8m
+        alertname: ExporterDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node-exporter, instance: n}
+            exp_annotations:
+              summary: "node-exporter cannot be scraped: node and cluster alerts are blind"
+      - eval_time: 8m
+        alertname: KubeNodeNotReady
+        exp_alerts:
+          - exp_labels: {severity: critical, node: n1, condition: Ready, status: "true"}
+            exp_annotations:
+              summary: Node n1 is not Ready
+
+  # Prometheus deleted a block for size while its oldest data is only 200 days old.
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_tsdb_size_retentions_total{job="prometheus"}'
+        values: '0 0 0 1 1 1 1 1 1 1'
+      - series: 'prometheus_tsdb_lowest_timestamp_seconds{job="prometheus"}'
+        values: '-17280000x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PrometheusRetentionShortened
+        exp_alerts:
+          - exp_labels: {severity: warning, job: prometheus}
+            exp_annotations:
+              summary: Prometheus is deleting data before it is a year old, because its storage reached the size cap
+              description: >-
+                The series budget no longer fits a year. Trim series (platform/monitoring/values.yaml) or give
+                Prometheus a bigger volume.
+
+  # The daily certificate check failed.
+  - interval: 1m
+    input_series:
+      - series: >-
+          kube_job_status_failed{namespace="monitoring", job_name="api-cert-check-29870000",
+          reason="BackoffLimitExceeded"}
+        values: '0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: KubeAPICertificateExpiring
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: monitoring
+              job_name: api-cert-check-29870000
+              reason: BackoffLimitExceeded
+            exp_annotations:
+              summary: The Kubernetes API certificate expires within 60 days, or the daily check failed
+              description: >-
+                k3s renews its certificates when it starts within 120 days of expiry, so restarting k3s renews them
+                (docs/operations.md). The check's log says which: scripts/kc-admin.sh logs -n monitoring
+                job/api-cert-check-29870000

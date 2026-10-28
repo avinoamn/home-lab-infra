@@ -6,11 +6,14 @@ FROM koalaman/shellcheck:v0.11.0 AS shellcheck
 FROM alpine/helm:3.21.2 AS helm
 FROM ghcr.io/helmfile/helmfile:v1.8.2 AS helmfile
 FROM ghcr.io/yannh/kubeconform:v0.8.0 AS kubeconform
+# promtool checks and unit-tests the alert rules. Keep it at the Prometheus version kube-prometheus-stack runs.
+FROM prom/prometheus:v3.15.0 AS prometheus
 
 FROM python:3.14.10-slim-trixie
 COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=helm /usr/bin/helm /usr/local/bin/helm
 COPY --from=helmfile /usr/local/bin/helmfile /usr/local/bin/helmfile
 COPY --from=kubeconform /kubeconform /usr/local/bin/kubeconform
+COPY --from=prometheus /bin/promtool /usr/local/bin/promtool
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt && rm /tmp/requirements.txt

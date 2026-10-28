@@ -1,0 +1,7 @@
+apiVersion: v2
+name: cluster-health
+description: >-
+  Alerts on the node and the platform (rules.yaml) and the Node dashboard (dashboards/), for the monitoring stack.
+  Installed by Helmfile as release `cluster-health` in namespace `monitoring`.
+type: application
+version: 1.0.0

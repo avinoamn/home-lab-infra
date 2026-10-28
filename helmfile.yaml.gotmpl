@@ -36,3 +36,10 @@ releases:
     version: 4.1.0
     values:
       - platform/uptime-kuma/values.yaml
+
+  # Alerts on the node and the platform, and the Node dashboard (platform/cluster-health/). A separate release, so
+  # changing an alert or a panel does not upgrade the whole monitoring stack. Needs kps for its CRDs.
+  - name: cluster-health
+    namespace: monitoring
+    chart: ./platform/cluster-health
+    needs: [monitoring/kps]

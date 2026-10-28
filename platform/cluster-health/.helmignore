@@ -1,0 +1,3 @@
+# Not part of the chart: the generator and the rule tests
+gen_dashboards.py
+rules_test.yaml

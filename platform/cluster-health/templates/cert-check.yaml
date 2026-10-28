@@ -1,0 +1,58 @@
+# Once a day: connect to the API server, verify its certificate against the cluster CA (the public kube-root-ca.crt
+# ConfigMap) and fail if it expires within certCheck.minDaysLeft days. A failed Job fires KubeAPICertificateExpiring
+# (rules.yaml). No API token, no write access, nothing kept: the Job only reads the certificate the server presents.
+# Finished Jobs are deleted after 25 hours, so a failure stops alerting the day after the check passes again.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: api-cert-check
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.certCheck.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      ttlSecondsAfterFinished: 90000
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: check
+              image: {{ .Values.certCheck.image }}
+              env:
+                - {name: MIN_DAYS_LEFT, value: {{ .Values.certCheck.minDaysLeft | quote }}}
+              command:
+                - python
+                - -c
+                - |
+                  import os, socket, ssl, sys, time
+                  host = "kubernetes.default.svc.cluster.local"
+                  ctx = ssl.create_default_context(cafile="/ca/ca.crt")
+                  with socket.create_connection((host, 443), timeout=10) as sock:
+                      with ctx.wrap_socket(sock, server_hostname=host) as tls:
+                          not_after = ssl.cert_time_to_seconds(tls.getpeercert()["notAfter"])
+                  days = (not_after - time.time()) / 86400
+                  minimum = int(os.environ["MIN_DAYS_LEFT"])
+                  print(f"API server certificate expires in {days:.0f} days (minimum {minimum})")
+                  sys.exit(0 if days >= minimum else 1)
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {memory: 64Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: ca, mountPath: /ca, readOnly: true}
+          volumes:
+            - name: ca
+              configMap: {name: kube-root-ca.crt}

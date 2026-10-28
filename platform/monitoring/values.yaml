@@ -34,12 +34,24 @@ alertmanager:
         discord_configs:
           - webhook_url_file: /etc/alertmanager/secrets/alertmanager-discord/webhook-url
             send_resolved: true
+  # Alertmanager's own metrics: only reload and Discord delivery (see the series budget below).
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__, integration]
+        action: keep
+        regex: alertmanager_notifications(_failed)?_total;discord|alertmanager_config_last_reload_successful;
 
 defaultRules:
   create: false          # the recording rules cost CPU and nothing here uses them
 
 # Keep the series count small so a long retention is cheap: the default stack produced ~86,000 series (kubelet 43k,
 # apiserver 31k) of which the dashboards use a few thousand. Measured 2026-10-03: ~380 MB/day before this trimming.
+# Measured 2026-10-28 after it: ~6,800 live series (8,700 in the head with pod churn), storage growing ~22 MB/day,
+# which reaches the 5GB cap after ~230 days instead of 365. So every exporter now keeps only what a dashboard or an
+# alert uses (the lists below; a project's metrics from its own ServiceMonitors are not affected).
+# SERIES BUDGET: about 1,500 live series for the platform's exporters, so a year fits in the cap. The "Prometheus
+# storage" panel of the Node dashboard and the PrometheusRetentionShortened alert (platform/cluster-health/) watch it.
+# A metric that is not in a list is not stored: add it here, with what uses it, before relying on it.
 kubeApiServer: {enabled: false}      # no dashboard uses apiserver metrics
 kubelet:
   serviceMonitor:
@@ -69,21 +81,67 @@ prometheusOperator:
   resources:
     requests: {cpu: 20m, memory: 64Mi}
     limits: {memory: 192Mi}
+  # The operator's internals (~600 series) are not used: keep one series so the target still shows as up.
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        action: keep
+        regex: prometheus_operator_reconcile_errors_total
 
 kube-state-metrics:      # object state, e.g. CronJobs and Jobs (kube_cronjob_*, kube_job_*) for dashboards and alerts
   resources:
     requests: {cpu: 10m, memory: 48Mi}
     limits: {memory: 128Mi}
+  # Only these families are generated at all (~170 series instead of ~2,400). Used by:
+  #   kube_cronjob_*, kube_job_status_failed        tickertape: poller dashboard, backup alerts
+  #   kube_pod_container_status_restarts_total      tickertape: ContainerRestarting; Node dashboard
+  #   kube_pod_container_resource_(limits|requests) tickertape: laya dashboard; Node dashboard (requests vs capacity)
+  #   kube_pod_container_status_last_terminated_reason  Node dashboard (OOMKilled containers)
+  #   kube_node_status_*                            cluster-health: KubeNodeNotReady, node pressure; Node dashboard
+  #   kube_persistentvolumeclaim_resource_requests_storage_bytes  Node dashboard (requested volume sizes)
+  metricAllowlist:
+    - kube_cronjob_created
+    - kube_cronjob_spec_suspend
+    - kube_cronjob_status_last_successful_time
+    - kube_job_status_failed
+    - kube_pod_container_status_restarts_total
+    - kube_pod_container_status_last_terminated_reason
+    - kube_pod_container_resource_limits
+    - kube_pod_container_resource_requests
+    - kube_node_status_condition
+    - kube_node_status_allocatable
+    - kube_node_status_capacity
+    - kube_persistentvolumeclaim_resource_requests_storage_bytes
 
 prometheus-node-exporter:
   resources:
     requests: {cpu: 10m, memory: 24Mi}
     limits: {memory: 64Mi}
+  # The node's CPU, memory, disks, network, pressure and temperature (the Node dashboard and the cluster-health
+  # alerts); ~140 series instead of ~1,300. The per-pod network interfaces (veth*, plus cni0, flannel and lo) are
+  # dropped: they made up ~600 series and changed with every pod.
+  prometheus:
+    monitor:
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          action: keep
+          regex: >-
+            node_cpu_seconds_total|node_memory_(MemAvailable|MemTotal|SwapTotal|SwapFree)_bytes|node_filesystem_(avail_bytes|size_bytes|files|files_free|readonly)|node_disk_(read_bytes_total|written_bytes_total|io_time_seconds_total)|node_network_(receive|transmit)_bytes_total|node_load(1|5|15)|node_pressure_(cpu|memory|io)_waiting_seconds_total|node_vmstat_oom_kill|node_boot_time_seconds|node_hwmon_temp_celsius|node_uname_info
+        - sourceLabels: [__name__, device]
+          action: drop
+          regex: node_network_.+;(veth.+|cni0|flannel\..+|lo)
 
 prometheus:
   # Not exposed outside the cluster; Grafana reaches it in-cluster. To look at it: port-forward (docs/operations.md).
+  # Prometheus's own metrics (~1,400 series): only storage, reloads and rule failures (the cluster-health alerts).
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        action: keep
+        regex: >-
+          prometheus_tsdb_(storage_blocks_bytes|wal_storage_size_bytes|head_series|head_samples_appended_total|lowest_timestamp_seconds|retention_limit_bytes|size_retentions_total|compactions_failed_total)|prometheus_config_last_reload_successful|prometheus_rule_evaluation_failures_total
   prometheusSpec:
-    retention: 365d                  # ~10 MB/day after the trimming above, so a year is a few GB
+    retention: 365d                  # the budget above is what makes a year fit in retentionSize
     retentionSize: 5GB               # hard cap on the 6Gi volume; the oldest blocks go first
     scrapeInterval: 30s
     evaluationInterval: 30s
