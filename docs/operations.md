@@ -172,7 +172,7 @@ The tailnet policy is `tailscale/policy.hujson` ([its README](../tailscale/READM
 3. Save. The console runs the file's `tests` and refuses to save if one fails, so a bad policy never goes live.
 4. Paste it unchanged every time, so the live policy stays identical to the file.
 
-**The node is tagged `tag:k3s`** (Machines, the node's menu, Edit tags). A tagged device belongs to the tag instead of a user, and has no key expiry. To make it user-owned again, re-authenticate it without tags on the node (`sudo tailscale up --advertise-tags= --force-reauth`, then log in as the user).
+**The node is tagged `tag:k3s`** (Machines, the node's menu, Edit tags). A tagged device belongs to the tag instead of a user. Tagging in the console keeps the device's key expiry, so it was turned off separately (the node's menu, Disable key expiry); the console shows "Expiry disabled". To make it user-owned again, re-authenticate it without tags on the node (`sudo tailscale up --advertise-tags= --force-reauth`, then log in as the user).
 
 ## Projects' guardrails
 

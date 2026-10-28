@@ -5,7 +5,7 @@
 {
   // Who may apply which tags. autogroup:admin is the tailnet's admins.
   "tagOwners": {
-    // The k3s node. Tagged in the console; a tagged device has no key expiry.
+    // The k3s node. Tagged in the console, with key expiry disabled there (a separate step).
     "tag:k3s": ["autogroup:admin"],
     // The shared CI tag, until tickertape's Deploy workflow uses its own (avinoamn/tickertape#54). Then removed.
     "tag:ci": ["autogroup:admin"],
