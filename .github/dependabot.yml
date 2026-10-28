@@ -1,0 +1,20 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      actions: {patterns: ["*"]}
+
+  # The tools image: its base images (ci/Dockerfile) and Python tools (ci/requirements.txt)
+  - package-ecosystem: docker
+    directory: /ci
+    schedule: {interval: weekly}
+    groups:
+      tools-images: {patterns: ["*"]}
+  - package-ecosystem: pip
+    directory: /ci
+    schedule: {interval: weekly}
+    groups:
+      tools-python: {patterns: ["*"]}

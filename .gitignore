@@ -1,0 +1,9 @@
+# Personal environment details and real addresses (kept locally, never part of the public repo)
+CLAUDE.local.md
+# Real values for scripts/check-private.sh to look for (one regex per line)
+.private-patterns
+
+# Local secrets and generated credentials
+.env
+*.kubeconfig
+secrets/
