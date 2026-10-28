@@ -3,7 +3,7 @@
 # Ansible and ansible-lint (#2), and Helmfile, helm and kubeconform (#3) are added when their files arrive.
 FROM koalaman/shellcheck:v0.11.0 AS shellcheck
 
-FROM python:3.14.10-slim-trixie
+FROM python:3.15.0-slim-trixie
 COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt && rm /tmp/requirements.txt
