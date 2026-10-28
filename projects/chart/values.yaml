@@ -1,3 +1,17 @@
 # The project list comes from projects/projects.yaml (passed with -f). `only` renders just that project.
 projects: []
 only: ""
+
+# LimitRange defaults for containers that set no resources of their own (templates/guardrails.yaml). No default
+# CPU limit: CPU limits throttle, so a project sets one only where it wants one.
+containerDefaults:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {memory: 256Mi}
+
+# Namespaces whose pods may reach every project (templates/guardrails.yaml): Traefik, the monitoring stack, uptime-kuma.
+platformNamespaces: [kube-system, monitoring, tools]
+
+# The cluster's pod and service networks (k3s's defaults: cluster-cidr and service-cidr). Clients outside them, which
+# only reach a project through a NodePort, are allowed in; pods inside them only by namespace
+# (templates/guardrails.yaml).
+clusterNetworks: [10.42.0.0/16, 10.43.0.0/16]

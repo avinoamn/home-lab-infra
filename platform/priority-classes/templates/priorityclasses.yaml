@@ -1,0 +1,28 @@
+# Which pods the scheduler places first, and which the kubelet evicts last when the node runs short of memory.
+# Pods without a class get priority 0. Referenced by name, so these names are part of the platform contract
+# (docs/platform.md, "Guardrails"). Only system-cluster-critical and system-node-critical (k3s's own) rank higher.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform
+value: 1000000
+preemptionPolicy: PreemptLowerPriority
+description: The platform itself (monitoring, uptime-kuma). Without it, nobody hears that a project is in trouble.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: project-data
+value: 100000
+preemptionPolicy: PreemptLowerPriority
+description: A project's stateful data (its database). Evicted after ordinary pods, and may push them aside to start.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: project-batch
+value: -1000
+preemptionPolicy: Never
+description: >-
+  Batch, ML and other work that can wait or restart. Evicted first under memory pressure, and never pushes another
+  pod aside.

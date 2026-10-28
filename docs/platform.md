@@ -8,7 +8,7 @@ The cluster is one small server (4 cores, 15 GiB of RAM) running k3s. In this do
 
 ### A namespace and a deploy account
 
-Each project gets one namespace, named after the project, and a `deployer` ServiceAccount in it. The steps are in [onboarding.md](onboarding.md). The account comes with a long-lived token, which the project uses in its local kubeconfig and in its GitHub deploy Environment. The account can manage, in its own namespace only:
+Each project gets one namespace, named after the project, with the guardrails described below, and a `deployer` ServiceAccount in it. The steps are in [onboarding.md](onboarding.md). The account comes with a long-lived token, which the project uses in its local kubeconfig and in its GitHub deploy Environment. The account can manage, in its own namespace only:
 
 - Pods, Services, ConfigMaps, Secrets and PersistentVolumeClaims
 - Deployments and StatefulSets, Jobs and CronJobs
@@ -64,11 +64,56 @@ The monitoring stack (Helm release `kps`, kube-prometheus-stack, in namespace `m
 - **Nothing exposed to the internet:** no router port forwarding, no Tailscale Funnel, no tunnels (Cloudflare Tunnel, ngrok and the like). Most UIs have no login, and they rely on staying on the private network.
 - **No admin credentials.** A project deploys with its own `deployer` account and never needs more.
 
-Not all of these are enforced yet. The `deployer` account already blocks cluster-scoped objects and other namespaces. Limits on NodePorts, host access and resources come with [#8](../../../issues/8). Until then, this document is the rule.
+Most of these are enforced, not just agreed (see "Guardrails" below):
+
+- The `deployer` account blocks cluster-scoped objects and other namespaces.
+- The quota caps the NodePort count and refuses LoadBalancers.
+- Pod Security `baseline` refuses host network, host ports, `hostPath` and privileged containers.
+
+Which port numbers a project uses, and not exposing anything to the internet, stay rules that the registry and reviews keep.
+
+## Guardrails
+
+Every project namespace gets these from its entry in `projects/projects.yaml` (`projects/chart/templates/`). The `deployer` account cannot change any of them.
+
+**A ResourceQuota (`project-quota`)** caps the namespace's totals:
+
+- `requests.cpu`, `requests.memory`, `limits.memory`
+- the number of pods and volumes, and their total requested storage
+- its NodePorts (as many as the registry assigns it)
+- no LoadBalancer Services
+
+A pod that would go over is refused when it is created, so the error shows up in the Deployment's or Job's events, not in the pod. There is no quota on CPU limits: that would force a CPU limit onto every container.
+
+- **Leave room for a rollout.** A `RollingUpdate` with surge runs the old and the new pod together and needs both in the quota. `Recreate` (stop, then start) needs only one, as do Jobs that run one at a time. Size the quota from what the project really uses (the Node dashboard's "per namespace" panels), plus its Jobs and its rollouts.
+
+**A LimitRange (`project-defaults`)** fills in resources for containers that set none: requests of 50m CPU and 64Mi memory, and a 256Mi memory limit. Helm hook Jobs and `kubectl run` pods usually set none, and without defaults the quota would refuse them. Set your own on every long-running container anyway (see "What a project must do").
+
+**NetworkPolicies (`default-deny-ingress`, `allow-own-and-platform`)** let into the namespace only:
+
+- the project's own pods
+- the platform's pods: Traefik in `kube-system`, Prometheus and Grafana in `monitoring`, uptime-kuma in `tools`
+- clients outside the cluster, who can only arrive through a NodePort (LAN and tailnet devices; the policy sees their own address)
+
+Other projects' pods cannot connect, not even through the node's NodePorts. The kubelet's health probes always pass. Outgoing traffic is not restricted. A project that must accept traffic from another project asks for it here. Pods on the host network are not covered by NetworkPolicies, which is one more reason they are the exception.
+
+**Pod Security** (the namespace label `pod-security.kubernetes.io/enforce`) is `baseline` by default: no host network, host ports, `hostPath`, privileged containers or added capabilities. A project whose registered host ports need the host network gets `privileged`, with the reason in the registry. `restricted` is available for a project that wants the stricter level.
+
+**PriorityClasses** decide which pods the scheduler places first and which the kubelet evicts last when the node runs short of memory:
+
+| Class | Value | For |
+|---|---|---|
+| `platform` | 1,000,000 | the platform's own pods (monitoring, uptime-kuma) |
+| `project-data` | 100,000 | a project's stateful data, such as its database |
+| *(none)* | 0 | everything else: the default |
+| `project-batch` | -1,000 | batch, ML and other work that can wait or restart; evicted first, never pushes another pod aside |
+
+A project references them by name (`priorityClassName`).
 
 ## What a project must do
 
-- **Set resource requests and limits on every container.** All projects share 4 cores and 15 GiB. A container without a CPU limit once took 3.5 cores and starved everything else.
+- **Set resource requests and limits on every container.** All projects share 4 cores and 15 GiB. A container without a CPU limit once took 3.5 cores and starved everything else. The LimitRange's defaults are a floor for stray Jobs, not a size for real work.
+- **Fit the quota, rollouts included** (see "Guardrails"), and give the database `project-data` and work that can wait `project-batch`.
 - **Pin images to exact versions,** never `latest` or another tag that moves. With a moving tag, what runs depends on what the node happened to cache.
 - **Keep its Secrets out of git.** Create them in the namespace, from a script or the deploy workflow.
 - **Back up its own data,** off the node, and test the restore. `local-path` volumes die with the disk.
@@ -99,7 +144,7 @@ Every NodePort, Ingress hostname and host port in use. The NodePort range is k3s
 
 ### Host ports
 
-None assigned. A project that needs `hostNetwork` or `hostPort` lists each port, its protocol and the reason here.
+None assigned yet. A project that needs `hostNetwork` or `hostPort` lists each port here, in a table with the columns Port, Protocol, Project and Reason, and gets `podSecurity: privileged` in its entry (`make check` refuses `privileged` without a row here).
 
 ### How `*.local` names resolve
 

@@ -1,11 +1,18 @@
 # The projects on the cluster, one entry each. Adding an entry onboards a project (docs/onboarding.md):
 #   name       the project's name, which is also its namespace
-#   grafana    true if Grafana should load dashboards and datasources from its namespace
-#   nodePorts  the NodePorts assigned to it: port and Service name (each also in docs/platform.md's registry)
+#   grafana    true if Grafana should load dashboards and datasources from its namespace (and may read its
+#              ConfigMaps and Secrets)
+#   nodePorts  the NodePorts assigned to it: port and Service name (each also in docs/platform.md's registry);
+#              their number is also the quota's NodePort count
 #   hosts      the `*.local` Ingress hostnames assigned to it (each also in the registry)
-# scripts/projects.sh renders each entry with projects/chart (namespace, deployer account), and Helmfile reads the
-# list for Grafana's namespaces (platform/monitoring/values-projects.yaml.gotmpl). `make check` checks that the ports
-# and hostnames match the registry.
+#   podSecurity  Pod Security level of its namespace: baseline (the default rule: no host network, host ports,
+#              hostPath or privileged containers), restricted, or privileged (only with host ports registered in
+#              docs/platform.md, and the reason recorded there)
+#   quota      its ResourceQuota (docs/platform.md, "Guardrails"): requests.cpu, requests.memory, limits.memory,
+#              pods, persistentvolumeclaims, requests.storage. Size it from what the project really uses (the Node
+#              dashboard's "per namespace" panels) with room for its Jobs and a rollout.
+# scripts/projects.sh renders each entry with projects/chart (namespace, deployer account, guardrails), and Helmfile
+# reads the list for Grafana. `make check` checks the entries against the registry.
 projects:
   - name: tickertape
     grafana: true
@@ -13,3 +20,13 @@ projects:
       - {port: 30002, service: ner-ui}
       - {port: 30003, service: laya-ui}
     hosts: [ner.local, laya.local]
+    podSecurity: baseline
+    # Measured 2026-10-28: requests 1.9 cores / 3.8 GiB, memory limits 8.75 GiB, 4 volumes (16 GiB); 7-day peaks laya
+    # 2.3 GiB and 2 cores, ner 1.7 GiB. ner and laya use Recreate rollouts, so an upgrade never runs two of each.
+    quota:
+      requests.cpu: "3"
+      requests.memory: 6Gi
+      limits.memory: 12Gi
+      pods: "30"
+      persistentvolumeclaims: "10"
+      requests.storage: 30Gi

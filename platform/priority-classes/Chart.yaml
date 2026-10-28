@@ -1,0 +1,7 @@
+apiVersion: v2
+name: priority-classes
+description: >-
+  The PriorityClasses projects and the platform use (cluster-wide, part of the platform contract). Installed by
+  Helmfile as release `priority-classes`; the release's own record is kept in namespace `monitoring`.
+type: application
+version: 1.0.0

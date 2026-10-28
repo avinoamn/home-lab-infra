@@ -163,6 +163,18 @@ After an apply, or when something looks wrong:
 
    It arrives within a minute (`group_wait` is 30 seconds), and resolves on its own after about five minutes.
 
+## Projects' guardrails
+
+Each project namespace has a ResourceQuota, a LimitRange, two NetworkPolicies and a Pod Security level, all from its entry in `projects/projects.yaml` ([platform.md](platform.md#guardrails)). They change like any onboarding object: edit the entry, then `scripts/projects.sh diff <project>` and `apply <project>`.
+
+- **How full the quota is:** `scripts/kc-admin.sh describe resourcequota project-quota -n <project>`. A pod refused by the quota shows up as `FailedCreate` in its Deployment's, ReplicaSet's or Job's events (`scripts/kc-admin.sh get events -n <project>`), not as a pod.
+- **A rollout stuck on the quota:** raise the quota in the entry, or switch the workload to `Recreate`.
+- **Something can't connect after a policy change:** NetworkPolicies take effect at once. To lift them while investigating (this changes the cluster), delete the allow-list and default-deny for that project, then re-apply with `projects.sh` when fixed. `projects.sh` never deletes anything, so they stay away until then:
+
+  ```sh
+  scripts/kc-admin.sh delete networkpolicy default-deny-ingress allow-own-and-platform -n <project>
+  ```
+
 ## uptime-kuma
 
 Helm release `uptime-kuma` in namespace `tools`, at `http://<node>:30001`. It checks from inside the cluster that the projects' UIs and the platform answer, and notifies Discord **on its own**, without Prometheus or Alertmanager. So it still reports when the monitoring stack itself is down. The chart version is pinned in `helmfile.yaml.gotmpl`, and the values are in `platform/uptime-kuma/values.yaml`.

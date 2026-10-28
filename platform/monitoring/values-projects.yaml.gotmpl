@@ -1,5 +1,6 @@
 {{- /* The namespaces Grafana's sidecars load dashboards and datasources from: `monitoring` plus every project in
-projects/projects.yaml with `grafana: true`. Onboarding such a project adds its namespace here (docs/onboarding.md). */ -}}
+projects/projects.yaml with `grafana: true`, and the namespaces where Grafana gets a Role to read ConfigMaps and
+Secrets. Onboarding such a project adds its namespace here (docs/onboarding.md). */ -}}
 {{- $namespaces := list "monitoring" }}
 {{- range .Values.projects }}
 {{- if .grafana }}
@@ -7,6 +8,8 @@ projects/projects.yaml with `grafana: true`. Onboarding such a project adds its 
 {{- end }}
 {{- end }}
 grafana:
+  rbac:
+    namespaces: {{ without $namespaces "monitoring" | toJson }}   # the chart adds its own namespace
   sidecar:
     dashboards:
       searchNamespace: {{ $namespaces | toJson }}
