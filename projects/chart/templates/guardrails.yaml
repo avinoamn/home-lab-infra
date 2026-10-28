@@ -1,0 +1,78 @@
+{{- /*
+The guardrails between projects, per project namespace (docs/platform.md, "Guardrails"):
+- a ResourceQuota from the entry's `quota` (plus its NodePort count, and no LoadBalancers);
+- a LimitRange with defaults for containers that set no resources (so the quota can count them);
+- NetworkPolicies: deny all ingress, except from the same namespace and the platform namespaces.
+The `deployer` Role cannot change any of these.
+*/ -}}
+{{- range .Values.projects }}
+{{- if or (not $.Values.only) (eq $.Values.only .name) }}
+{{- if not .quota }}
+{{- fail (printf "project %q has no quota (projects/projects.yaml)" .name) }}
+{{- end }}
+---
+# Caps on what the namespace may request in total. A pod that would go over is rejected when it is created.
+# Only requests and memory limits are capped: a CPU-limit cap would force CPU limits onto every container.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: project-quota
+  namespace: {{ .name }}
+spec:
+  hard:
+    {{- range $key, $value := .quota }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    services.nodeports: {{ len .nodePorts | quote }}    # the NodePorts assigned in the registry
+    services.loadbalancers: "0"                          # ServiceLB would take ports on every node address
+---
+# Defaults for containers that set no resources (Helm hook Jobs, `kubectl run` pods...), so they fit the quota.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: project-defaults
+  namespace: {{ .name }}
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        {{- toYaml $.Values.containerDefaults.requests | nindent 8 }}
+      default:
+        {{- toYaml $.Values.containerDefaults.limits | nindent 8 }}
+---
+# No traffic into the namespace unless a policy below allows it. Egress is not restricted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ .name }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Allowed in: the project's own pods; the platform (Traefik in kube-system, Prometheus and Grafana in monitoring,
+# uptime-kuma in tools); and clients outside the cluster, which can only arrive through a NodePort. The policy is
+# checked before kube-proxy rewrites a NodePort client's address, so it sees the LAN or tailnet device itself;
+# every source outside the pod and service networks is allowed, and other projects' pods (inside them) are not.
+# The kubelet's probes come from the node and always pass (tested on k3s v1.36.2; docs/decisions.md).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-own-and-platform
+  namespace: {{ .name }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: {{ $.Values.platformNamespaces | toJson }}
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: {{ $.Values.clusterNetworks | toJson }}
+{{- end }}
+{{- end }}

@@ -23,7 +23,17 @@ On a branch of this repository:
      nodePorts:
        - {port: 30005, service: myproject-ui}
      hosts: [myproject.local]
+     podSecurity: baseline                  # privileged only with host ports in the registry
+     quota:                                 # from what it really uses, with room for Jobs and rollouts
+       requests.cpu: "1"
+       requests.memory: 2Gi
+       limits.memory: 4Gi
+       pods: "20"
+       persistentvolumeclaims: "4"
+       requests.storage: 10Gi
    ```
+
+   The quota, a LimitRange with defaults, the NetworkPolicies and the Pod Security level are the project's guardrails ([platform.md](platform.md#guardrails)). A new project has no measured use yet, so start from its own estimate and adjust after a week on the Node dashboard.
 
 2. Add the same ports and hostnames to the registry in [platform.md](platform.md#registry). NodePorts take the next free number.
 3. Run `make check`. It fails if the entry and the registry disagree, or if a port or hostname is taken twice.
@@ -38,7 +48,7 @@ On a branch of this repository:
 After the pull request is merged, from an up-to-date `main` (each command changes the cluster):
 
 ```sh
-scripts/projects.sh apply myproject     # namespace, deployer, token Secret, Role, RoleBinding
+scripts/projects.sh apply myproject     # namespace, deployer, token Secret, Role, RoleBinding, guardrails
 scripts/helmfile.sh apply               # only if grafana: true, to add the namespace to Grafana's list
 ```
 

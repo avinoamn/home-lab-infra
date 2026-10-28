@@ -11,14 +11,22 @@ re-applying them changes nothing. Keep it that way: any change here changes ever
 {{- if has .name $reserved }}
 {{- fail (printf "project name %q is a namespace that belongs to k3s or the platform" .name) }}
 {{- end }}
+{{- if not (has .podSecurity (list "baseline" "restricted" "privileged")) }}
+{{- fail (printf "project %q: podSecurity must be baseline, restricted or privileged" .name) }}
+{{- end }}
 {{- if or (not $.Values.only) (eq $.Values.only .name) }}
 ---
 # The project's namespace. Everything the project runs lives here, including its local-path volumes: deleting the
 # namespace deletes their data (offboarding, docs/onboarding.md).
+# Pod Security admission rejects pods above the entry's level: `baseline` forbids hostNetwork, host ports, hostPath
+# and privileged containers (docs/platform.md, "Guardrails"). `warn` reports the same at `kubectl apply` time.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ .name }}
+  labels:
+    pod-security.kubernetes.io/enforce: {{ .podSecurity }}
+    pod-security.kubernetes.io/warn: {{ .podSecurity }}
 ---
 # The identity the project deploys with, from a laptop or its GitHub Environment.
 apiVersion: v1

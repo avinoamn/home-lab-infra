@@ -11,6 +11,8 @@ import yaml
 REGISTRY = "docs/platform.md"
 PROJECTS = "projects/projects.yaml"
 
+QUOTA_KEYS = {"requests.cpu", "requests.memory", "limits.memory", "pods", "persistentvolumeclaims", "requests.storage"}
+
 errors = []
 
 
@@ -29,6 +31,7 @@ def table_rows(text, heading):
 text = open(REGISTRY, encoding="utf-8").read()
 ports = table_rows(text, "### NodePorts")            # Port | Project | Namespace | Service | What
 hosts = table_rows(text, "### Ingress hostnames")    # Hostname | Project | Namespace
+host_ports = [r for r in table_rows(text, "### Host ports") if len(r) >= 3]   # Port | Protocol | Project | Reason
 
 for kind, column in (("NodePort", [r[0] for r in ports]), ("hostname", [r[0] for r in hosts])):
     for value in {v for v in column if column.count(v) > 1}:
@@ -43,6 +46,16 @@ for p in projects:
     name = p.get("name", "?")
     if not isinstance(p.get("grafana"), bool):
         errors.append(f"{PROJECTS}: {name}: `grafana` must be true or false")
+    level = p.get("podSecurity")
+    if level not in ("baseline", "restricted", "privileged"):
+        errors.append(f"{PROJECTS}: {name}: podSecurity must be baseline, restricted or privileged")
+    if level == "privileged" and not any(r[2] == name for r in host_ports):
+        errors.append(f"{PROJECTS}: {name}: podSecurity privileged needs its host ports in the registry ({REGISTRY})")
+    quota = p.get("quota") or {}
+    for key in sorted(QUOTA_KEYS - set(quota)):
+        errors.append(f"{PROJECTS}: {name}: quota needs {key}")
+    for key in sorted(set(quota) - QUOTA_KEYS):
+        errors.append(f"{PROJECTS}: {name}: quota key {key} is not one the platform sets (NodePorts come from nodePorts)")
     want_ports = {(str(np["port"]), np["service"]) for np in p.get("nodePorts") or []}
     have_ports = {(r[0], r[3]) for r in ports if r[1] == name}
     for port, service in sorted(want_ports - have_ports):

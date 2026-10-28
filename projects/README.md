@@ -5,7 +5,7 @@ The projects on the cluster, and what each one gets from the platform.
 | File | What |
 |---|---|
 | [`projects.yaml`](projects.yaml) | One entry per project: name (also its namespace), whether Grafana loads its dashboards, its NodePorts and hostnames |
-| [`chart/`](chart/) | Renders each entry into its namespace and its `deployer` account: ServiceAccount, token Secret, Role (every permission explained) and RoleBinding |
+| [`chart/`](chart/) | Renders each entry into its namespace (with its Pod Security level) and its `deployer` account (ServiceAccount, token Secret, Role with every permission explained, RoleBinding), and the guardrails: ResourceQuota, LimitRange, NetworkPolicies |
 
 `scripts/projects.sh` renders the chart on the node and runs `kubectl diff` or `kubectl apply` there. It is never installed as a Helm release ([docs/decisions.md](../docs/decisions.md), "Projects"). Helmfile also reads `projects.yaml`, for Grafana's list of namespaces.
 

@@ -6,6 +6,7 @@ The shared services, as Helmfile releases and their values. The releases themsel
 |---|---|---|---|
 | Monitoring stack (Prometheus, Alertmanager, Grafana) | `kps` (kube-prometheus-stack) | `monitoring` | [`monitoring/`](monitoring/) ([#3](../../../issues/3)) |
 | Node and platform alerts, the Node dashboard, the API certificate check | `cluster-health` (local chart) | `monitoring` | [`cluster-health/`](cluster-health/) ([#7](../../../issues/7)) |
+| The PriorityClasses `platform`, `project-data`, `project-batch` | `priority-classes` (local chart) | cluster-wide | [`priority-classes/`](priority-classes/) ([#8](../../../issues/8)) |
 | uptime-kuma | `uptime-kuma` | `tools` | [`uptime-kuma/`](uptime-kuma/) ([#5](../../../issues/5)) |
 | Overrides for k3s's bundled Traefik | a k3s `HelmChartConfig` | `kube-system` | when one is needed |
 

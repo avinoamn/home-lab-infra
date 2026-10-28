@@ -27,13 +27,15 @@ if [ -f .private-patterns ]; then
   done < .private-patterns
 fi
 
+k3s_defaults='10\.42\.0\.0|10\.43\.0\.0'
 email='[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
 email_ok='noreply@.*|.*@example\.(com|org|net)|.*@users\.noreply\.github\.com|git@github\.com'
 
 [ $# -gt 0 ] || exit 0
 found=0
 for p in "${patterns[@]}"; do
-  if grep -nHIE -- "$p" "$@"; then found=1; fi
+  # k3s's default pod and service networks are public knowledge, not this lab's addresses.
+  if grep -noHIE -- "$p" "$@" | grep -vE ":($k3s_defaults)$"; then found=1; fi
 done
 if grep -noHIE -- "$email" "$@" | grep -vE -- "^[^:]+:[0-9]+:($email_ok)$"; then found=1; fi
 

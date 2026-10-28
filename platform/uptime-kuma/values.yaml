@@ -6,6 +6,8 @@
 # Its monitors, notifications and admin login live in its SQLite database on the volume `uptime-kuma-pvc` (4Gi,
 # local-path), not in this repository: back the database up before anything risky (docs/operations.md).
 
+priorityClassName: platform    # docs/platform.md, "Guardrails"
+
 service:
   type: NodePort
   nodePort: 30001    # http://<node>:30001 (registry: docs/platform.md)
