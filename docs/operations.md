@@ -110,3 +110,49 @@ After an apply, or when something looks wrong:
    ```
 
    It arrives within a minute (`group_wait` is 30 seconds), and resolves on its own after about five minutes.
+
+## uptime-kuma
+
+Helm release `uptime-kuma` in namespace `tools`, at `http://<node>:30001`. It checks from inside the cluster that the projects' UIs and the platform answer, and notifies Discord **on its own**, without Prometheus or Alertmanager. So it still reports when the monitoring stack itself is down. The chart version is pinned in `helmfile.yaml.gotmpl`, and the values are in `platform/uptime-kuma/values.yaml`.
+
+### Monitors
+
+Monitors are set up by hand in uptime-kuma's UI and stored in its database, not in this repository (see [decisions.md](decisions.md), "uptime-kuma"). This table is the reference, so they can be rebuilt from it. Keep it in step with the UI.
+
+Every monitor is of type HTTP(s): checked every 60 seconds, marked down after 2 failed retries (60 seconds apart), and sent to the notification "Discord (home-lab alerts)".
+
+| Name | URL | Accepted codes | Notes |
+|---|---|---|---|
+| tickertape: ner UI | `http://ner-ui.tickertape.svc.cluster.local:7860/` | 200-299 | |
+| tickertape: laya UI | `http://laya-ui.tickertape.svc.cluster.local:7860/` | 200-299 | |
+| platform: Grafana | `http://kps-grafana.monitoring.svc.cluster.local/api/health` | 200-299 | |
+| platform: Prometheus | `http://kps-kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/-/healthy` | 200-299 | |
+| platform: Alertmanager | `http://kps-kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093/-/healthy` | 200-299 | |
+| platform: Kubernetes API | `https://kubernetes.default.svc.cluster.local/readyz` | 200-299, 401 | "Ignore TLS/SSL errors" on. k3s turns off anonymous access, so `/readyz` answers 401 without a login, which still proves the API server answers. The cluster's CA is not in uptime-kuma's trust store. |
+
+The checks use the in-cluster Service names, so they test the application, not the NodePort path from outside. A project that wants its UI watched adds a row here and the monitor in the UI when it is onboarded.
+
+**The notification** "Discord (home-lab alerts)" (type Discord, "Default enabled" on, so new monitors get it) posts to the same channel as Alertmanager. Its webhook URL is in uptime-kuma's database only.
+
+### Backing up and restoring
+
+The database (`/app/data/kuma.db`, SQLite, on the volume `uptime-kuma-pvc`) holds the monitors, the notification with its webhook, the admin login and the history. Back it up before anything risky (an upgrade, a node change) and after changing monitors:
+
+```sh
+scripts/backup-uptime-kuma.sh     # read-only: ~/home-lab-backups/uptime-kuma-<UTC time>.sql.gz
+```
+
+It is a consistent SQL dump (`sqlite3 -readonly .dump` inside the pod), checked for completeness before it is kept. It contains the admin password hash and the webhook, so keep it private.
+
+To restore (this changes the cluster: plan it, and back up the current state first):
+
+```sh
+pod=$(scripts/kc-admin.sh get pods -n tools -l app.kubernetes.io/instance=uptime-kuma -o jsonpath='{.items[0].metadata.name}')
+gzip -dc ~/home-lab-backups/uptime-kuma-<time>.sql.gz \
+  | scripts/kc-admin.sh exec -i -n tools "$pod" -- sqlite3 /app/data/kuma.db.restore
+scripts/kc-admin.sh exec -n tools "$pod" -- sh -c \
+  'cd /app/data && sqlite3 kuma.db.restore "pragma integrity_check" && mv kuma.db.restore kuma.db && rm -f kuma.db-wal kuma.db-shm'
+scripts/kc-admin.sh rollout restart deployment/uptime-kuma -n tools
+```
+
+The dump has been test-loaded into a fresh database (integrity check passes). The full restore on the cluster is rehearsed with disaster recovery ([#9](../../../issues/9)).

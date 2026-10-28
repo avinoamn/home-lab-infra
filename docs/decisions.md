@@ -69,3 +69,13 @@ The cost: removing an entry does not delete anything, and offboarding is a separ
 **The project list and the registry must agree, and `make check` enforces it.** Each project's NodePorts and hostnames are in `projects/projects.yaml` and in the registry in platform.md, and the check fails on any difference or duplicate. Blocking them inside the cluster (an admission policy) is part of [#8](../../../issues/8).
 
 **Offboarding refuses to run while the project is still listed, and needs `CONFIRM_DELETE=<project>`.** Deleting a namespace deletes its `local-path` volumes, and their data cannot be recovered. Requiring the list change (merged through a pull request) and an explicit confirmation makes it a deliberate, two-step act.
+
+## uptime-kuma
+
+**uptime-kuma was adopted unchanged.** Release `uptime-kuma` kept its name, namespace (`tools`), chart version (4.1.0, app 2.3.0) and its only values (the NodePort). `helmfile diff` against the live release was empty. The same diff with a changed NodePort showed the change, which proves the empty result is real.
+
+**It watches the projects' UIs and the platform itself, and notifies Discord on its own.** Prometheus and Alertmanager cannot report their own outage, but uptime-kuma checks them from inside the cluster and sends its own notifications. That gives a second path that does not depend on the monitoring stack. When adopted it had no monitors at all. Six were added: the two tickertape UIs, Grafana, Prometheus, Alertmanager and the Kubernetes API.
+
+**Its monitors are set up by hand and documented, not managed as code.** A tool that creates monitors from files (AutoKuma) would make them reviewable, but it adds a component, changes the adopted release, and needs an uptime-kuma login stored in the cluster. With a handful of monitors, a table in operations.md plus database backups is enough to rebuild them. Revisit if the list grows or changes often.
+
+**Its database is backed up as a SQL dump to the laptop.** `sqlite3 -readonly .dump` inside the pod gives a consistent copy without stopping it or touching the volume, and the image already has `sqlite3`. The dump holds the webhook and the admin password hash, so it stays off the repository. It is on the list of data that is not code ([#9](../../../issues/9)).

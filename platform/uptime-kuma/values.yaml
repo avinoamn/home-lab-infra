@@ -1,0 +1,11 @@
+# uptime-kuma: release `uptime-kuma` in namespace `tools`. It checks from inside the cluster that the UIs and services
+# answer, and notifies on its own, independent of the monitoring stack (docs/operations.md, "uptime-kuma").
+# The chart version is pinned in helmfile.yaml.gotmpl. Everything else is the chart's default, as when it was installed
+# by hand on 2026-07-07.
+#
+# Its monitors, notifications and admin login live in its SQLite database on the volume `uptime-kuma-pvc` (4Gi,
+# local-path), not in this repository: back the database up before anything risky (docs/operations.md).
+
+service:
+  type: NodePort
+  nodePort: 30001    # http://<node>:30001 (registry: docs/platform.md)

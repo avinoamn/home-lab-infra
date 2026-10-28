@@ -15,6 +15,8 @@ helmDefaults:
 repositories:
   - name: prometheus-community
     url: https://prometheus-community.github.io/helm-charts
+  - name: uptime-kuma
+    url: https://helm.irsigler.cloud
 
 releases:
   # The monitoring stack: Prometheus, Alertmanager, Grafana and the Prometheus Operator (platform/monitoring/).
@@ -26,3 +28,11 @@ releases:
     values:
       - platform/monitoring/values.yaml
       - platform/monitoring/values-projects.yaml.gotmpl
+
+  # uptime-kuma: checks that the UIs and services answer (platform/uptime-kuma/). Its monitors live in its database.
+  - name: uptime-kuma
+    namespace: tools
+    chart: uptime-kuma/uptime-kuma
+    version: 4.1.0
+    values:
+      - platform/uptime-kuma/values.yaml

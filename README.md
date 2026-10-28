@@ -23,7 +23,7 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 | The node (Ubuntu, Tailscale, k3s) | | installed by hand | [#2](../../issues/2) |
 | Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | **this repository**, [`platform/monitoring/`](platform/monitoring/) | done ([#3](../../issues/3)) |
 | Namespace and `deployer` account for each project | `tickertape` | **this repository**, [`projects/`](projects/) | done ([#4](../../issues/4)) |
-| uptime-kuma (Helm release `uptime-kuma`) | `tools` | installed by hand | [#5](../../issues/5) |
+| uptime-kuma (Helm release `uptime-kuma`) | `tools` | **this repository**, [`platform/uptime-kuma/`](platform/uptime-kuma/) (its monitors: [docs/operations.md](docs/operations.md#uptime-kuma)) | done ([#5](../../issues/5)) |
 | Tailscale policy | | edited in the Tailscale console | [#6](../../issues/6) |
 | Traefik, CoreDNS, local-path storage, metrics-server | `kube-system` | bundled with k3s | stays with k3s |
 
