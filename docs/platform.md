@@ -41,7 +41,7 @@ The monitoring stack (Helm release `kps`, kube-prometheus-stack, in namespace `m
 - **ServiceMonitors, PodMonitors and PrometheusRules from any namespace.** No `release:` label is needed.
 - **Grafana dashboards:** ConfigMaps labelled `grafana_dashboard: "1"`, annotated `grafana_folder: <project>`. Each project gets its own folder. A dashboard `uid` must be unique across every project: if two share one, Grafana shows only one and stops loading dashboard changes. Prefix uids with the project name.
 - **Grafana datasources:** Secrets labelled `grafana_datasource: "1"`. Secrets, because datasources carry passwords. Datasource uids must be unique too.
-- Grafana loads dashboards and datasources only from the namespaces on its list. A namespace is added to the list at onboarding.
+- Grafana loads dashboards and datasources only from `monitoring` and the namespaces in `projects/projects.yaml`. Onboarding adds the project's namespace there.
 - **Alerts** from a project's PrometheusRules go to one shared Discord channel, grouped by alert name and namespace. Use the `severity` values `critical`, `warning` and `info`.
 - **Grafana** is at NodePort 30004: anonymous viewing, plus an admin login for changes.
 - **Prometheus** is internal (no NodePort). It keeps 365 days of history on a small volume that is sized for a trimmed set of series. Keep metric labels low-cardinality: no IDs, URLs or user names as label values.

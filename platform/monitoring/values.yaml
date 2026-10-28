@@ -1,0 +1,147 @@
+# kube-prometheus-stack for the home-lab node (a 4-core Celeron shared by every project): release `kps` in namespace
+# `monitoring`. The chart version is pinned in helmfile.yaml.gotmpl, and scripts/helmfile.sh applies it
+# (docs/operations.md). Sized small on purpose: a tiny Alertmanager, no default rules/dashboards, k3s control-plane
+# scrapes off (k3s does not expose those endpoints, so the targets would just be red).
+# The namespace lists for Grafana's sidecars are in values-projects.yaml.gotmpl, generated from projects/projects.yaml.
+
+# Alertmanager forwards the alerts from the projects' PrometheusRules to one Discord channel shared by all projects,
+# grouped by alert name and namespace, so each message names the project (docs/decisions.md). The webhook URL is in
+# Secret `alertmanager-discord` (key `webhook-url`, made by scripts/create-monitoring-secrets.sh) and is mounted as a
+# file, so it is never in this repo or in the Alertmanager config.
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    secrets: [alertmanager-discord]   # mounted at /etc/alertmanager/secrets/alertmanager-discord/
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 96Mi}
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources: {requests: {storage: 200Mi}}   # silences and notification state survive a restart
+  config:
+    route:
+      receiver: discord
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes: []   # drop the chart's default Watchdog route: it points at a "null" receiver that is replaced below
+    receivers:
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/alertmanager-discord/webhook-url
+            send_resolved: true
+
+defaultRules:
+  create: false          # the recording rules cost CPU and nothing here uses them
+
+# Keep the series count small so a long retention is cheap: the default stack produced ~86,000 series (kubelet 43k,
+# apiserver 31k) of which the dashboards use a few thousand. Measured 2026-10-03: ~380 MB/day before this trimming.
+kubeApiServer: {enabled: false}      # no dashboard uses apiserver metrics
+kubelet:
+  serviceMonitor:
+    probes: false                    # /metrics/probes: unused
+    resource: false
+    cAdvisorInterval: 30s            # the chart default is 10s
+    # cAdvisor is where the dashboards get container CPU and memory from: keep only those two series.
+    cAdvisorMetricRelabelings:
+      - sourceLabels: [__name__]
+        action: keep
+        regex: container_(cpu_usage_seconds_total|memory_working_set_bytes)
+    # The kubelet's own /metrics is not used by any panel: keep a couple of tiny series so the target still shows as up.
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        action: keep
+        regex: kubelet_node_name|kubelet_running_pods
+
+# k3s runs these inside one process and does not serve their metrics ports.
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+kubeEtcd: {enabled: false}
+coreDns: {enabled: false}
+kubeDns: {enabled: false}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 192Mi}
+
+kube-state-metrics:      # object state, e.g. CronJobs and Jobs (kube_cronjob_*, kube_job_*) for dashboards and alerts
+  resources:
+    requests: {cpu: 10m, memory: 48Mi}
+    limits: {memory: 128Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 24Mi}
+    limits: {memory: 64Mi}
+
+prometheus:
+  # Not exposed outside the cluster; Grafana reaches it in-cluster. To look at it: port-forward (docs/operations.md).
+  prometheusSpec:
+    retention: 365d                  # ~10 MB/day after the trimming above, so a year is a few GB
+    retentionSize: 5GB               # hard cap on the 6Gi volume; the oldest blocks go first
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    # Pick up ServiceMonitors and rules from any namespace (each project ships its own) without a `release:` label.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 1Gi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources: {requests: {storage: 6Gi}}
+
+grafana:
+  defaultDashboardsEnabled: false   # only the projects' own dashboards (see sidecar below)
+  defaultDashboardsTimezone: browser
+  # Access model: anyone on the LAN/Tailscale can VIEW dashboards without a login
+  # (same as the ner and laya UIs, no per-device setup); changing anything needs the admin login. Never expose it to
+  # the internet. Admin credentials live in Secret `grafana-admin` (created by scripts/create-monitoring-secrets.sh,
+  # never in the repo).
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  serviceMonitor: {enabled: false}   # Grafana's own metrics (5k series) are not used
+  persistence: {enabled: false}      # dashboards and datasources are all provisioned; nothing to keep
+  service:
+    type: NodePort
+    nodePort: 30004                  # http://<node>:30004 (registry: docs/platform.md)
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts: [grafana.local]
+    path: /
+  resources:
+    requests: {cpu: 50m, memory: 192Mi}
+    limits: {memory: 512Mi}
+  # The sidecars load dashboards and datasources from labelled ConfigMaps and Secrets. Each project ships its own from
+  # its namespace, so the sidecars watch an explicit list of namespaces, never ALL: only `monitoring` and the onboarded
+  # projects can add dashboards or datasources. That list (`searchNamespace`) is in values-projects.yaml.gotmpl, made
+  # from projects/projects.yaml. Each project's dashboards go into their own folder, named by the grafana_folder
+  # annotation. Datasources carry passwords, so projects provide them as Secrets labelled grafana_datasource=1.
+  # The only datasources defined here are the chart's own: Prometheus (uid `prometheus`) and Alertmanager.
+  sidecar:
+    resources:
+      requests: {cpu: 10m, memory: 48Mi}
+      limits: {memory: 128Mi}
+    dashboards:
+      label: grafana_dashboard
+      labelValue: "1"
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true

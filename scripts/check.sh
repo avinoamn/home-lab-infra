@@ -26,5 +26,13 @@ run() {
 [ ${#shell[@]} -eq 0 ] || run "shellcheck (${#shell[@]} files)" shellcheck "${shell[@]}"
 run "private values (${#files[@]} files)" bash scripts/check-private.sh "${files[@]}"
 
+if [ -f helmfile.yaml.gotmpl ]; then
+  # Downloads the pinned charts, so it needs network access. CRDs are left out of the render (--include-crds is off);
+  # objects of CRD kinds (ServiceMonitor, Prometheus...) have no schema in kubeconform and are skipped.
+  run "helmfile lint" helmfile lint --quiet
+  run "helmfile template | kubeconform" bash -c \
+    'set -o pipefail; helmfile template --quiet | kubeconform -strict -ignore-missing-schemas -summary'
+fi
+
 [ "$status" -eq 0 ] && echo "all checks passed" || echo "some checks failed"
 exit "$status"

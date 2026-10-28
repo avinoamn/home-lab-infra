@@ -1,0 +1,28 @@
+# Everything this repository installs on the cluster with Helm, with pinned chart versions.
+# Run it with scripts/helmfile.sh, which runs Helmfile on the node with the admin kubeconfig (docs/operations.md).
+# Every release keeps the name, namespace and chart version it had when it was adopted, so adopting it changed nothing.
+
+environments:
+  default:
+    values:
+      - projects/projects.yaml
+
+---
+helmDefaults:
+  wait: true          # return once everything is ready, as the old install script did
+  timeout: 600
+
+repositories:
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+
+releases:
+  # The monitoring stack: Prometheus, Alertmanager, Grafana and the Prometheus Operator (platform/monitoring/).
+  # Upgrading it is heavy for the node: apply when the projects are quiet.
+  - name: kps
+    namespace: monitoring
+    chart: prometheus-community/kube-prometheus-stack
+    version: 91.9.0
+    values:
+      - platform/monitoring/values.yaml
+      - platform/monitoring/values-projects.yaml.gotmpl

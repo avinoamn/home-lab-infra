@@ -24,6 +24,10 @@ Why this repository is set up the way it is. Each entry states the decision in b
 - **Running Helmfile on the laptop through an SSH tunnel to the API:** this puts the admin credential on the laptop's disk.
 - **Applying from GitHub Actions:** an admin token stored in GitHub could do far more damage than a project's namespace-scoped deploy token. Infrastructure changes are rare, so automating them saves little.
 
+**Helmfile runs in a temporary directory on the node, with its own Helm repository list.** `scripts/helmfile.sh` copies only the files Helmfile reads, and removes them afterwards. The node's own `helm repo` list is left alone, so nothing on the node depends on what the last run added. The charts are downloaded again on every run, which takes seconds.
+
+**Helmfile and helm-diff were installed on the node by a script before the node was under Ansible.** Adopting the monitoring stack ([#3](../../../issues/3)) needed them before [#2](../../../issues/2) brought the node under code. `scripts/install-node-tools.sh` puts them in the admin user's home without sudo, checks their checksums, and uses the paths Ansible will take over.
+
 **CI only validates.** On every pull request it lints, renders and schema-checks the files and looks for private values. It never connects to the cluster.
 
 **No pull-based controller (Flux, Argo CD).** tickertape rejected one for its attack surface: a controller with cluster-admin rights that follows a git repository. Several projects sharing the cluster do not change that. On a 4-core node with 15 GiB of RAM, the controller would also compete with the projects for memory and CPU. Each project deploys itself with its own namespace-scoped account.
@@ -39,3 +43,11 @@ The rules themselves are in [platform.md](platform.md). These entries say why th
 **Every project must set CPU and memory requests and limits, pin its images, keep Secrets out of git, back up its own data and register its ports and hostnames.** All projects share 4 cores and 15 GiB. Without a CPU limit, one tickertape service once took 3.5 of the 4 cores. Moving image tags make a rollout depend on what the node cached. The platform cannot back up a project's data, because only the project knows how to restore it consistently. Some of these rules are enforced only from [#8](../../../issues/8) on. Until then they are rules a project agrees to.
 
 **`hostNetwork` and `hostPort` are allowed only for host ports assigned in the registry.** They are banned by default, because a pod on the host network bypasses the cluster's networking and can take ports that other projects or the node need. They are not banned outright, because some workloads need them. A WebRTC media server, for example, must receive UDP directly on the node's address. Each port is registered with its protocol and the reason.
+
+## Monitoring
+
+**The monitoring stack was adopted, not reinstalled.** Release `kps` kept its name, namespace (`monitoring`), chart version (kube-prometheus-stack 91.9.0) and values. Before the first apply from this repository, the values Helmfile produces were compared with the live release's (identical), and `helmfile diff` against the live release was empty. A reinstall would have taken the whole stack down and put Prometheus's year of history at risk, for no gain.
+
+**One Discord channel for every project's alerts.** Alerts are grouped by alert name and namespace, so each message names the project, and nothing in the live configuration had to change. Per-project routes (projects bringing `AlertmanagerConfig` objects in their namespace) were left for when a project needs a different receiver. They need `alertmanagerConfigSelector` settings in the stack and a wider `deployer` Role.
+
+**Grafana's list of namespaces comes from the project list.** The dashboard and datasource sidecars watch `monitoring` plus every namespace in `projects/projects.yaml`, never all namespaces. Onboarding a project is then one entry in that file, and a namespace that was never onboarded cannot add dashboards or datasources.
