@@ -1,0 +1,13 @@
+# The k3s node as code. It describes the node as it runs, so a check run (scripts/node.sh check) reports no changes;
+# on a fresh Ubuntu 24.04 server it installs the same (docs/operations.md, "The node").
+# Facts are gathered as the SSH user, so ansible_user_id and ansible_env.HOME are the admin user's; tasks that need
+# root say `become: true`, and the sudo password is asked for at the start.
+- name: The k3s node
+  hosts: computa
+  become: false
+  roles:
+    - base
+    - tailscale
+    - k3s
+    - node_tools
+    - admin_kubeconfig

@@ -26,7 +26,7 @@ Why this repository is set up the way it is. Each entry states the decision in b
 
 **Helmfile runs in a temporary directory on the node, with its own Helm repository list.** `scripts/helmfile.sh` copies only the files Helmfile reads, and removes them afterwards. The node's own `helm repo` list is left alone, so nothing on the node depends on what the last run added. The charts are downloaded again on every run, which takes seconds.
 
-**Helmfile and helm-diff were installed on the node by a script before the node was under Ansible.** Adopting the monitoring stack ([#3](../../../issues/3)) needed them before [#2](../../../issues/2) brought the node under code. `scripts/install-node-tools.sh` puts them in the admin user's home without sudo, checks their checksums, and uses the paths Ansible will take over.
+**Helmfile and helm-diff were installed on the node by a script before the node was under Ansible.** Adopting the monitoring stack ([#3](../../../issues/3)) needed them before [#2](../../../issues/2) brought the node under code. A script (`scripts/install-node-tools.sh`) put them in the admin user's home without sudo, checksum-verified. The node's playbook took them over at the same paths, and the script was removed.
 
 **CI only validates.** On every pull request it lints, renders and schema-checks the files and looks for private values. It never connects to the cluster.
 
@@ -124,3 +124,15 @@ Each guardrail was tried first on a throw-away k3s at the node's version (v1.36.
 **One CI tag per project, generated from the project list.** `tag:ci-<project>` reaches the cluster API and that project's own NodePorts only, so a project's GitHub workflow cannot reach another project's UIs. The tag, its grant and a test (it reaches its ports and not SSH or any other NodePort in the registry) are generated from `projects/projects.yaml`, so onboarding a project adds them. tickertape's tag does not reach Grafana (30004): its Deploy workflow uses only the API and its own UIs. The shared `tag:ci` stays until tickertape switches (avinoamn/tickertape#54), then it is removed.
 
 **Your own devices keep reaching everything, through `autogroup:member` rather than `"*"`.** `"*"` also matches tagged devices, so it would hand every CI runner the whole tailnet.
+
+## The node
+
+**The node is captured as it was installed, and hardened later.** The playbook reproduces what runs: Ubuntu's packages, automatic security updates, Tailscale, k3s with no flags, the admin tools and the admin kubeconfig. Its first check run against the live node reported no changes. The inventory found SSH with Ubuntu's defaults (password login allowed) and ufw installed but off. Changing either is a separate, reviewed change, so adopting the node could not lock anyone out or block a port by accident.
+
+**Ansible asks for the sudo password on every run.** It runs as the admin user and needs root for most tasks, even in check mode. A passwordless sudo rule was rejected: anyone with the laptop's SSH key would get root without a second secret. `scripts/node.sh` reads the password without echo in your terminal and passes it to the container on stdin, so it is never on a command line, in the environment or on the laptop's disk. An earlier version used Ansible's own prompt through `winpty`, which broke on Git Bash's path rewriting.
+
+**k3s is installed with its own install script, from the pinned release's tag, only when the version differs.** That is how the node was installed, so the systemd unit and the bundled components stay exactly as k3s writes them; templating the unit would drift from upstream. The script's checksum is pinned, and the script verifies the k3s binary itself. The same "install only when missing or another version" rule covers Helm, Helmfile and helm-diff, so a check run on an up-to-date node changes nothing.
+
+**Tailscale's signing key is pinned by checksum.** Without a checksum, `get_url` would re-download the key whenever the server's copy is newer than the node's, so the first check run reported a change even though the key was identical. With the checksum, a rotated key fails the run instead of being trusted silently.
+
+**The k3s `tls-san` change is left for later.** Adding the node's Tailscale address and names to the API certificate (a `/etc/rancher/k3s/config.yaml`) would remove the need for `tls-server-name` when dialling the Tailscale address. It changes the certificate and needs a k3s restart, so it is its own decision.

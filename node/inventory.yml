@@ -1,0 +1,4 @@
+# The node, by its SSH host alias. The real address, user and key are in ~/.ssh/config (`Host computa`), never here.
+all:
+  hosts:
+    computa:

@@ -1,5 +1,7 @@
 # Personal environment details and real addresses (kept locally, never part of the public repo)
 CLAUDE.local.md
+# The log of the last scripts/node.sh run
+node-run*.log
 # Real values for scripts/check-private.sh to look for (one regex per line)
 .private-patterns
 

@@ -28,6 +28,9 @@ run() {
 run "private values (${#files[@]} files)" bash scripts/check-private.sh "${files[@]}"
 
 run "projects and registry" python scripts/check-projects.py
+# shellcheck disable=SC2016 # $PWD expands in the inner bash, inside node/
+run "node playbook (ansible-lint, syntax)" bash -c \
+  'cd node && ANSIBLE_CONFIG=$PWD/ansible.cfg ansible-lint --offline -q && ANSIBLE_CONFIG=$PWD/ansible.cfg ansible-playbook site.yml --syntax-check'
 run "Tailscale policy (generated parts, syntax, rules)" python scripts/gen-tailscale-policy.py --check
 run "project onboarding | kubeconform" bash -c \
   'set -o pipefail; helm template onboarding projects/chart -f projects/projects.yaml | kubeconform -strict -summary'
