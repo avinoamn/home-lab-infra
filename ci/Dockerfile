@@ -8,7 +8,7 @@ FROM ghcr.io/yannh/kubeconform:v0.8.0 AS kubeconform
 # promtool checks and unit-tests the alert rules. Keep it at the Prometheus version kube-prometheus-stack runs.
 FROM prom/prometheus:v3.15.0 AS prometheus
 
-FROM python:3.14.10-slim-trixie
+FROM python:3.15.0-slim-trixie
 COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=helm /usr/bin/helm /usr/local/bin/helm
 COPY --from=helmfile /usr/local/bin/helmfile /usr/local/bin/helmfile
