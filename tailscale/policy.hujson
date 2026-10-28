@@ -1,0 +1,55 @@
+// The tailnet policy (Tailscale admin console, Access controls). This file is the source of truth: change it here,
+// then paste it into the console's editor (docs/operations.md, "Tailscale policy"). The parts between the
+// "BEGIN projects" and "END projects" lines are generated from projects/projects.yaml by
+// scripts/gen-tailscale-policy.py; `make check` fails if they are out of date. No addresses: the node is `tag:k3s`.
+{
+  // Who may apply which tags. autogroup:admin is the tailnet's admins.
+  "tagOwners": {
+    // The k3s node. Tagged in the console; a tagged device has no key expiry.
+    "tag:k3s": ["autogroup:admin"],
+    // The shared CI tag, until tickertape's Deploy workflow uses its own (avinoamn/tickertape#54). Then removed.
+    "tag:ci": ["autogroup:admin"],
+    // BEGIN projects: one CI tag per project, for its GitHub Actions runners (ephemeral nodes).
+    "tag:ci-tickertape": ["autogroup:admin"],
+    // END projects
+  },
+
+  "grants": [
+    // Your own devices can reach each other and everything else. Not "*": that would also match tagged devices,
+    // such as a project's CI runner.
+    {"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
+
+    // The shared CI tag, until avinoamn/tickertape#54: the API and the UI ports it had before.
+    {"src": ["tag:ci"], "dst": ["tag:k3s"], "ip": ["tcp:6443", "tcp:30002", "tcp:30003", "tcp:30004"]},
+
+    // BEGIN projects: each project's CI tag reaches the cluster API and its own NodePorts, nothing else.
+    {"src": ["tag:ci-tickertape"], "dst": ["tag:k3s"], "ip": ["tcp:6443", "tcp:30002", "tcp:30003"]},
+    // END projects
+  ],
+
+  "ssh": [
+    // Allow all users to SSH into their own devices in check mode.
+    {
+      "action": "check",
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self"],
+      "users": ["autogroup:nonroot", "root"],
+    },
+  ],
+
+  // Checked every time the policy is saved: the console refuses to save a policy whose tests fail.
+  "tests": [
+    {
+      "src": "tag:ci",
+      "accept": ["tag:k3s:6443", "tag:k3s:30002", "tag:k3s:30004"],
+      "deny": ["tag:k3s:22", "tag:k3s:5432"],
+    },
+    // BEGIN projects: each project's CI tag reaches the API and its own NodePorts, and not SSH or the others.
+    {
+      "src": "tag:ci-tickertape",
+      "accept": ["tag:k3s:6443", "tag:k3s:30002", "tag:k3s:30003"],
+      "deny": ["tag:k3s:22", "tag:k3s:30001", "tag:k3s:30004", "tag:k3s:30393", "tag:k3s:31963"],
+    },
+    // END projects
+  ],
+}

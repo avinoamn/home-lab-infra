@@ -28,6 +28,7 @@ run() {
 run "private values (${#files[@]} files)" bash scripts/check-private.sh "${files[@]}"
 
 run "projects and registry" python scripts/check-projects.py
+run "Tailscale policy (generated parts, syntax, rules)" python scripts/gen-tailscale-policy.py --check
 run "project onboarding | kubeconform" bash -c \
   'set -o pipefail; helm template onboarding projects/chart -f projects/projects.yaml | kubeconform -strict -summary'
 

@@ -32,7 +32,7 @@ It can also read logs and events, and use `exec` and `port-forward`. It cannot t
 
 - **A NodePort for each web UI**, assigned in the [registry](#registry) below. It opens as `http://<node>:<port>` from any device on the LAN or the tailnet, with nothing to set up on the device.
 - **Traefik** (bundled with k3s) serves Ingresses on port 80 for `*.local` hostnames from the registry. See [how `*.local` names resolve](#how-local-names-resolve).
-- **Tailscale.** The node is on the tailnet. Who can reach which ports is set by the Tailscale policy in `tailscale/` ([#6](../../../issues/6)).
+- **Tailscale.** The node is on the tailnet as `tag:k3s`. Your own devices reach everything. A project's GitHub runners join as `tag:ci-<project>` and reach only the API and that project's NodePorts (`tailscale/policy.hujson`).
 
 ### Monitoring and alerts
 
