@@ -163,6 +163,17 @@ After an apply, or when something looks wrong:
 
    It arrives within a minute (`group_wait` is 30 seconds), and resolves on its own after about five minutes.
 
+## Tailscale policy
+
+The tailnet policy is `tailscale/policy.hujson` ([its README](../tailscale/README.md)). The console holds the live copy, and the file is the source of truth. To change it:
+
+1. Edit the file on a branch. For a project's tag and grant, change `projects/projects.yaml` and run `python scripts/gen-tailscale-policy.py`. Run `make check`, and merge.
+2. In the admin console, open Access controls and paste the whole file over the editor's content. "Preview rules" shows who may reach what.
+3. Save. The console runs the file's `tests` and refuses to save if one fails, so a bad policy never goes live.
+4. Paste it unchanged every time, so the live policy stays identical to the file.
+
+**The node is tagged `tag:k3s`** (Machines, the node's menu, Edit tags). A tagged device belongs to the tag instead of a user. Tagging in the console keeps the device's key expiry, so it was turned off separately (the node's menu, Disable key expiry); the console shows "Expiry disabled". To make it user-owned again, re-authenticate it without tags on the node (`sudo tailscale up --advertise-tags= --force-reauth`, then log in as the user).
+
 ## Projects' guardrails
 
 Each project namespace has a ResourceQuota, a LimitRange, two NetworkPolicies and a Pod Security level, all from its entry in `projects/projects.yaml` ([platform.md](platform.md#guardrails)). They change like any onboarding object: edit the entry, then `scripts/projects.sh diff <project>` and `apply <project>`.
