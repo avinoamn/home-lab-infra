@@ -1,0 +1,5 @@
+# The projects on the cluster. Each name is also the project's namespace. Helmfile reads this list (environment values
+# in helmfile.yaml.gotmpl): Grafana loads dashboards and datasources only from these namespaces and `monitoring`.
+# Onboarding (#4) adds the rest of each project's entry: its deploy account, ports and hostnames.
+projects:
+  - name: tickertape

@@ -21,7 +21,7 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 | Piece | Namespace | Defined today | Moves here in |
 |---|---|---|---|
 | The node (Ubuntu, Tailscale, k3s) | | installed by hand | [#2](../../issues/2) |
-| Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | tickertape's `k8s/monitoring/` | [#3](../../issues/3) |
+| Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | **this repository**, [`platform/monitoring/`](platform/monitoring/) | done ([#3](../../issues/3)) |
 | Namespace and `deployer` account for tickertape | `tickertape` | tickertape's `k8s/rbac.yaml` | [#4](../../issues/4) |
 | uptime-kuma (Helm release `uptime-kuma`) | `tools` | installed by hand | [#5](../../issues/5) |
 | Tailscale policy | | edited in the Tailscale console | [#6](../../issues/6) |
@@ -60,7 +60,7 @@ CI (`.github/workflows/ci.yml`) runs `make check` on every pull request and on `
 ## Principles
 
 - **Adopt, don't reinstall.** Everything here already runs and holds data (Prometheus history, uptime-kuma's monitors, project databases). Each piece is brought under code with the same names and versions, and the first apply must change nothing.
-- **Changes are applied from a laptop, with admin access over SSH.** Ansible manages the node and Helmfile manages the cluster, and Helmfile runs on the node, so the admin kubeconfig never leaves it. No admin credential is stored in GitHub. CI only validates. The reasons are in [docs/decisions.md](docs/decisions.md).
+- **Changes are applied from a laptop, with admin access over SSH.** Ansible manages the node and Helmfile manages the cluster, and Helmfile runs on the node, so the admin kubeconfig never leaves it. No admin credential is stored in GitHub. CI only validates. The reasons are in [docs/decisions.md](docs/decisions.md), and how to apply a change is in [docs/operations.md](docs/operations.md).
 - **Nothing is exposed to the internet.** Web UIs are reached over the LAN or Tailscale, on NodePorts assigned per project.
 - **Public, so nothing private.** No secrets, IP addresses, user names or tailnet names in this repository. Real values live in git-ignored files, cluster Secrets or GitHub Secrets.
 
