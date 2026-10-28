@@ -24,7 +24,7 @@ Read-only commands (`get`, `describe`, `logs`, `helmfile diff`) are always safe.
 | Helmfile | 1.8.2 | `~/.local/bin/helmfile` |
 | helm-diff plugin | 3.15.15 | `~/.local/share/helm/plugins/diff` |
 
-`scripts/install-node-tools.sh` installs Helmfile and helm-diff at the pinned versions, checksum-verified and without sudo. Re-running it is safe. When the node is managed by Ansible ([#2](../../../issues/2)), Ansible installs them instead, at the same paths. The tools image in CI (`ci/Dockerfile`) uses the same Helm and Helmfile versions; upgrade them together.
+`scripts/install-node-tools.sh` installs Helmfile and helm-diff at the pinned versions, checksum-verified and without sudo. Re-running it is safe. When the node is managed by Ansible ([#2](../../../issues/2)), Ansible installs them instead, at the same paths. The tools image in CI (`ci/Dockerfile`) uses the same Helm and Helmfile versions; upgrade them together. Its `promtool` likewise matches the Prometheus version kube-prometheus-stack runs. Dependabot skips these three (`.github/dependabot.yml`), so they move only with the node or the monitoring stack. It keeps proposing the tools that stand alone (Python, shellcheck, kubeconform, yamllint).
 
 ## Applying a change
 
