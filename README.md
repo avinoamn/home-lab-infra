@@ -22,7 +22,7 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 |---|---|---|---|
 | The node (Ubuntu, Tailscale, k3s) | | installed by hand | [#2](../../issues/2) |
 | Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | **this repository**, [`platform/monitoring/`](platform/monitoring/) | done ([#3](../../issues/3)) |
-| Namespace and `deployer` account for tickertape | `tickertape` | tickertape's `k8s/rbac.yaml` | [#4](../../issues/4) |
+| Namespace and `deployer` account for each project | `tickertape` | **this repository**, [`projects/`](projects/) | done ([#4](../../issues/4)) |
 | uptime-kuma (Helm release `uptime-kuma`) | `tools` | installed by hand | [#5](../../issues/5) |
 | Tailscale policy | | edited in the Tailscale console | [#6](../../issues/6) |
 | Traefik, CoreDNS, local-path storage, metrics-server | `kube-system` | bundled with k3s | stays with k3s |
@@ -35,7 +35,7 @@ Projects: [tickertape](https://github.com/avinoamn/tickertape) (RSS feeds, NER a
 |---|---|---|
 | [`node/`](node/) | The server: OS, Tailscale, k3s | Ansible (in a container) |
 | [`platform/`](platform/) | Shared services: monitoring, uptime-kuma, Traefik overrides | Helmfile (run on the node) |
-| [`projects/`](projects/) | One onboarding entry per project: namespace, `deployer` account | Helmfile (run on the node) |
+| [`projects/`](projects/) | One entry per project: namespace, `deployer` account, ports, hostnames. How to onboard: [docs/onboarding.md](docs/onboarding.md) | a small Helm chart, rendered and applied with `kubectl` (on the node) |
 | [`tailscale/`](tailscale/) | The Tailscale policy | |
 | [`docs/platform.md`](docs/platform.md) | **The platform contract:** what a project gets, what it must not do, and the port and hostname registry | |
 | [`docs/decisions.md`](docs/decisions.md) | Why things are the way they are | |

@@ -9,6 +9,7 @@ All admin work runs on the node over SSH, with the admin kubeconfig that lives t
 | Script | What it does |
 |---|---|
 | `scripts/kc-admin.sh <kubectl args>` | `kubectl` as cluster admin, on the node |
+| `scripts/projects.sh diff [project]`, `apply <project>` | The projects' namespaces and deploy accounts: renders `projects/chart` on the node and runs `kubectl diff` or `kubectl apply` ([onboarding.md](onboarding.md)) |
 | `scripts/helmfile.sh <helmfile args>` | Helmfile on the node. It copies `helmfile.yaml.gotmpl`, `platform/` and `projects/` to a temporary directory there, runs, and removes it. Helm's repository list and cache stay in that directory, so the node's own Helm setup is not touched. |
 
 Read-only commands (`get`, `describe`, `logs`, `helmfile diff`) are always safe. Anything that changes the cluster is a planned change.

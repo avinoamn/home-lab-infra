@@ -12,7 +12,7 @@ Why this repository is set up the way it is. Each entry states the decision in b
 
 **Ansible runs in a pinned Docker container, the same image CI uses.** Ansible does not run on Windows, and the development machine is Windows. A container gives local runs and CI the same tool versions, and a newcomer needs only Docker. WSL was rejected because its versions drift from CI and every machine needs its own setup. Running Ansible on the node itself was rejected because it needs extra Python packages there and cannot build a node from nothing.
 
-**Helmfile manages everything this repository installs on the cluster:** the platform releases (monitoring, uptime-kuma), the Traefik override and per-project onboarding. One file pins every release and chart version, and `helmfile diff` (through the helm-diff plugin) shows each change before it is applied. Releases keep their existing names, so adopting them changes nothing. Rejected alternatives:
+**Helmfile manages the platform releases:** monitoring, uptime-kuma and the Traefik override. (Per-project onboarding was planned here too; see "Projects" below for why it is not.) One file pins every release and chart version, and `helmfile diff` (through the helm-diff plugin) shows each change before it is applied. Releases keep their existing names, so adopting them changes nothing. Rejected alternatives:
 
 - **A plain `helm` script per release** (tickertape's way): no single view of what is installed, and diffs need extra steps.
 - **OpenTofu** with the helm and kubernetes providers: its state file would hold Secret values and would need protected storage.
@@ -51,3 +51,21 @@ The rules themselves are in [platform.md](platform.md). These entries say why th
 **One Discord channel for every project's alerts.** Alerts are grouped by alert name and namespace, so each message names the project, and nothing in the live configuration had to change. Per-project routes (projects bringing `AlertmanagerConfig` objects in their namespace) were left for when a project needs a different receiver. They need `alertmanagerConfigSelector` settings in the stack and a wider `deployer` Role.
 
 **Grafana's list of namespaces comes from the project list.** The dashboard and datasource sidecars watch `monitoring` plus every namespace in `projects/projects.yaml`, never all namespaces. Onboarding a project is then one entry in that file, and a namespace that was never onboarded cannot add dashboards or datasources.
+
+## Projects
+
+**A project's namespace and deploy account are rendered from a small Helm chart and applied with `kubectl apply`, not installed as a Helm release.** `projects/chart` turns each entry of `projects/projects.yaml` into a Namespace, the `deployer` ServiceAccount, its token Secret, a Role and a RoleBinding. `scripts/projects.sh` renders them on the node and runs `kubectl diff` or `kubectl apply`, the same way tickertape first created them. Adopting tickertape was therefore an exact no-op (`kubectl diff` empty, every object `unchanged` in a server-side dry run). A Helm release per project was rejected for three reasons:
+
+- Adopting the live objects would have added Helm's labels and annotations to them.
+- Helm would own each Namespace, so a careless `helm uninstall` could delete a project's volumes and their data.
+- The release records would sit in the project's own namespace, where its `deployer` can edit them.
+
+The cost: removing an entry does not delete anything, and offboarding is a separate script.
+
+**Every project gets the same Role,** tickertape's, with a comment on each permission. A project that needs more asks for it here, and the change applies to every project. Per-project exceptions would make the contract harder to reason about.
+
+**The token is a long-lived Secret, rotated only as a planned change.** Kubernetes no longer creates one by itself, and a short-lived token would need a refresh path from GitHub Actions into the cluster. The token works only inside the tailnet and only in one namespace. Recreating the Secret changes the token and breaks the project's kubeconfig and its `KUBE_TOKEN` until both are updated, so `scripts/projects.sh` never deletes it.
+
+**The project list and the registry must agree, and `make check` enforces it.** Each project's NodePorts and hostnames are in `projects/projects.yaml` and in the registry in platform.md, and the check fails on any difference or duplicate. Blocking them inside the cluster (an admission policy) is part of [#8](../../../issues/8).
+
+**Offboarding refuses to run while the project is still listed, and needs `CONFIRM_DELETE=<project>`.** Deleting a namespace deletes its `local-path` volumes, and their data cannot be recovered. Requiring the list change (merged through a pull request) and an explicit confirmation makes it a deliberate, two-step act.

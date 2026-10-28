@@ -1,0 +1,7 @@
+apiVersion: v2
+name: project-onboarding
+description: >-
+  Each project's namespace and namespace-scoped deploy account. Rendered with `helm template` and applied with
+  `kubectl apply` by scripts/projects.sh; never installed as a Helm release (docs/decisions.md).
+type: application
+version: 1.0.0

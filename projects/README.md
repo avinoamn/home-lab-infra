@@ -1,7 +1,14 @@
 # projects/
 
-The projects on the cluster. [`projects.yaml`](projects.yaml) lists them; each name is also the project's namespace. Today the list sets which namespaces Grafana loads dashboards and datasources from.
+The projects on the cluster, and what each one gets from the platform.
 
-Onboarding ([#4](../../../issues/4)) adds the rest, rendered from one template per project: its namespace, its `deployer` ServiceAccount, Role and token. A project's ports and hostnames are registered in [docs/platform.md](../docs/platform.md). Until then, tickertape's namespace and account are still defined in the tickertape repository.
+| File | What |
+|---|---|
+| [`projects.yaml`](projects.yaml) | One entry per project: name (also its namespace), whether Grafana loads its dashboards, its NodePorts and hostnames |
+| [`chart/`](chart/) | Renders each entry into its namespace and its `deployer` account: ServiceAccount, token Secret, Role (every permission explained) and RoleBinding |
+
+`scripts/projects.sh` renders the chart on the node and runs `kubectl diff` or `kubectl apply` there. It is never installed as a Helm release ([docs/decisions.md](../docs/decisions.md), "Projects"). Helmfile also reads `projects.yaml`, for Grafana's list of namespaces.
+
+How to onboard or offboard a project, step by step: [docs/onboarding.md](../docs/onboarding.md). The ports and hostnames must also be in the registry in [docs/platform.md](../docs/platform.md); `make check` checks that they match.
 
 The project's own workloads are not here. They live in the project's repository, which deploys them into its namespace with its `deployer` account.

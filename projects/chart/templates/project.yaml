@@ -1,0 +1,94 @@
+{{- /*
+One set of objects per project: its namespace and the namespace-scoped `deployer` account it deploys with.
+The object names and fields match what tickertape created with `kubectl apply` before this repository existed, so
+re-applying them changes nothing. Keep it that way: any change here changes every project's live objects.
+*/ -}}
+{{- $reserved := list "default" "kube-system" "kube-public" "kube-node-lease" "monitoring" "tools" }}
+{{- range .Values.projects }}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" .name) }}
+{{- fail (printf "project name %q is not a valid namespace name" .name) }}
+{{- end }}
+{{- if has .name $reserved }}
+{{- fail (printf "project name %q is a namespace that belongs to k3s or the platform" .name) }}
+{{- end }}
+{{- if or (not $.Values.only) (eq $.Values.only .name) }}
+---
+# The project's namespace. Everything the project runs lives here, including its local-path volumes: deleting the
+# namespace deletes their data (offboarding, docs/onboarding.md).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .name }}
+---
+# The identity the project deploys with, from a laptop or its GitHub Environment.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: {{ .name }}
+---
+# A long-lived token for `deployer` (Kubernetes no longer creates one by itself). It is in the project's kubeconfig
+# and in its GitHub Environment (KUBE_TOKEN). Never delete or recreate it outside a planned rotation: a new token
+# breaks both (docs/onboarding.md, "Rotating the token").
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deployer-token
+  namespace: {{ .name }}
+  annotations:
+    kubernetes.io/service-account.name: deployer
+type: kubernetes.io/service-account-token
+---
+# What `deployer` may do, in this namespace only. It cannot touch other namespaces or anything cluster-scoped
+# (namespaces, nodes, CRDs, RBAC), and cannot change its own permissions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer
+  namespace: {{ .name }}
+rules:
+  # Run and expose workloads, with their configuration, volumes and Secrets. Secrets also hold Helm's release
+  # state, so a project can deploy with `helm upgrade --install` without more permissions.
+  - apiGroups: [""]
+    resources: [pods, services, endpoints, configmaps, secrets, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Read logs and events when something goes wrong.
+  - apiGroups: [""]
+    resources: [pods/log, events]
+    verbs: [get, list, watch]
+  # Debug inside a pod and reach a port that has no NodePort (a database, a metrics endpoint).
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [get, create]
+  # Deployments and StatefulSets. Not the `scale` subresource: to stop or start one, patch its replicas.
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Read-only, so `kubectl rollout status` and Helm's --wait can follow a rollout.
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+  # Jobs and CronJobs: scheduled work, backups, migrations, Helm hooks.
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Ingresses for the `*.local` hostnames registered in docs/platform.md (Traefik serves them).
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Metrics and alerts: the monitoring stack picks these up from any namespace.
+  - apiGroups: [monitoring.coreos.com]
+    resources: [servicemonitors, prometheusrules]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer
+  namespace: {{ .name }}
+subjects:
+  - {kind: ServiceAccount, name: deployer, namespace: {{ .name }}}
+roleRef:
+  {apiGroup: rbac.authorization.k8s.io, kind: Role, name: deployer}
+{{- end }}
+{{- end }}

@@ -8,7 +8,7 @@ The cluster is one small server (4 cores, 15 GiB of RAM) running k3s. In this do
 
 ### A namespace and a deploy account
 
-Each project gets one namespace, named after the project, and a `deployer` ServiceAccount in it. Onboarding is described in [#4](../../../issues/4). The account comes with a long-lived token, which the project uses in its local kubeconfig and in its GitHub deploy Environment. The account can manage, in its own namespace only:
+Each project gets one namespace, named after the project, and a `deployer` ServiceAccount in it. The steps are in [onboarding.md](onboarding.md). The account comes with a long-lived token, which the project uses in its local kubeconfig and in its GitHub deploy Environment. The account can manage, in its own namespace only:
 
 - Pods, Services, ConfigMaps, Secrets and PersistentVolumeClaims
 - Deployments and StatefulSets, Jobs and CronJobs
