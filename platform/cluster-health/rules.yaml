@@ -1,0 +1,146 @@
+# Alerts on the node and the platform itself, in Prometheus's rule-file format, so promtool can check and unit-test
+# them (rules_test.yaml, run by `make check`). The chart wraps them in a PrometheusRule (templates/prometheusrule.yaml).
+# Alertmanager sends them to the shared Discord channel. Severities: critical (act now), warning (act today).
+# Every metric used here must be kept by platform/monitoring/values.yaml (its lists of kept series).
+groups:
+  - name: node
+    rules:
+      # All local-path volumes and Prometheus's data live on the node's filesystems, so this covers volumes too.
+      - alert: NodeFilesystemFillingUp
+        expr: >-
+          predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|vfat"}[6h], 24 * 3600) < 0
+          and node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|vfat"} / node_filesystem_size_bytes < 0.4
+          and node_filesystem_readonly == 0
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.mountpoint }} will be full within a day at the current rate"
+          description: >-
+            It is filling fast enough to run out within 24 hours, and every project's volumes are on it. The Node
+            dashboard shows what grows.
+      - alert: NodeFilesystemFillingUpFast
+        expr: >-
+          predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|vfat"}[1h], 4 * 3600) < 0
+          and node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|vfat"} / node_filesystem_size_bytes < 0.2
+          and node_filesystem_readonly == 0
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.mountpoint }} will be full within 4 hours at the current rate"
+      - alert: NodeFilesystemAlmostFull
+        expr: >-
+          node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|vfat"} / node_filesystem_size_bytes < 0.05
+          and node_filesystem_readonly == 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.mountpoint }} has less than 5% free ({{ $value | humanizePercentage }})"
+      - alert: NodeMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Only {{ $value | humanizePercentage }} of the node's memory is available"
+          description: Out-of-memory kills are likely next. See the Node dashboard for memory per namespace.
+      - alert: NodeOOMKill
+        expr: increase(node_vmstat_oom_kill[10m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: The kernel killed a process for lack of memory
+          description: >-
+            A container hit its memory limit or the node ran out. "OOMKilled containers" on the Node dashboard
+            shows which one.
+      - alert: NodeCPUSaturated
+        expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[10m])) > 0.9
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "The node's CPU has been over 90% busy for an hour ({{ $value | humanizePercentage }})"
+          description: Every project slows down. See CPU per namespace on the Node dashboard.
+      - alert: KubeNodeNotReady
+        expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Node {{ $labels.node }} is not Ready"
+      - alert: KubeNodePressure
+        expr: kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure", status="true"} == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Node {{ $labels.node }} reports {{ $labels.condition }}"
+          description: The kubelet starts evicting pods under pressure.
+
+  - name: exporters
+    rules:
+      # If an exporter is down, the node alerts above go silent. Prometheus and Alertmanager themselves are watched
+      # from outside by uptime-kuma (docs/operations.md).
+      - alert: ExporterDown
+        expr: up{job=~"node-exporter|kube-state-metrics"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }} cannot be scraped: node and cluster alerts are blind"
+      - alert: ExporterMissing
+        expr: absent(up{job="node-exporter"}) or absent(up{job="kube-state-metrics"})
+        for: 10m
+        labels: {severity: critical, namespace: monitoring}
+        annotations:
+          summary: Prometheus has no target for node-exporter or kube-state-metrics
+
+  - name: prometheus
+    rules:
+      # retentionSize deletes the oldest data once the cap is reached. Before a year has passed, that means the
+      # series budget (platform/monitoring/values.yaml) no longer fits.
+      - alert: PrometheusRetentionShortened
+        expr: >-
+          increase(prometheus_tsdb_size_retentions_total[1d]) > 0
+          and (time() - prometheus_tsdb_lowest_timestamp_seconds) < 360 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: Prometheus is deleting data before it is a year old, because its storage reached the size cap
+          description: >-
+            The series budget no longer fits a year. Trim series (platform/monitoring/values.yaml) or give
+            Prometheus a bigger volume.
+      - alert: PrometheusStorageWillReachCap
+        expr: >-
+          predict_linear(
+            (prometheus_tsdb_storage_blocks_bytes + prometheus_tsdb_wal_storage_size_bytes)[7d:1h], 30 * 86400
+          ) > prometheus_tsdb_retention_limit_bytes
+          and (time() - prometheus_tsdb_lowest_timestamp_seconds) < 335 * 86400
+        for: 6h
+        labels: {severity: warning}
+        annotations:
+          summary: Prometheus's storage will reach its size cap within 30 days, before holding a full year
+          description: The series budget in platform/monitoring/values.yaml no longer fits. Trim series first.
+      - alert: PrometheusRuleFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Some alert rules fail to evaluate, so they cannot fire
+      - alert: MonitoringConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0 or alertmanager_config_last_reload_successful == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.job }} failed to load its new configuration and runs on the old one"
+
+  - name: certificates
+    rules:
+      # The daily api-cert-check Job (templates/cert-check.yaml) fails when the certificate expires within 60 days.
+      - alert: KubeAPICertificateExpiring
+        expr: kube_job_status_failed{namespace="monitoring", job_name=~"api-cert-check-.*"} > 0
+        labels: {severity: warning}
+        annotations:
+          summary: The Kubernetes API certificate expires within 60 days, or the daily check failed
+          description: >-
+            k3s renews its certificates when it starts within 120 days of expiry, so restarting k3s renews them
+            (docs/operations.md). The check's log says which: scripts/kc-admin.sh logs -n monitoring
+            job/{{ $labels.job_name }}
+      - alert: KubeAPICertificateCheckNotRunning
+        expr: >-
+          time() - kube_cronjob_status_last_successful_time{namespace="monitoring", cronjob="api-cert-check"}
+          > 3 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: The daily check of the Kubernetes API certificate has not passed for 3 days

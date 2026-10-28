@@ -31,6 +31,11 @@ run "projects and registry" python scripts/check-projects.py
 run "project onboarding | kubeconform" bash -c \
   'set -o pipefail; helm template onboarding projects/chart -f projects/projects.yaml | kubeconform -strict -summary'
 
+run "alert rules (promtool check + unit tests)" bash -c \
+  'cd platform/cluster-health && promtool check rules rules.yaml && promtool test rules rules_test.yaml'
+run "dashboards are generated from gen_dashboards.py" python platform/cluster-health/gen_dashboards.py --check
+run "metrics used by rules and dashboards are kept" python scripts/check-kept-metrics.py
+
 if [ -f helmfile.yaml.gotmpl ]; then
   # Downloads the pinned charts, so it needs network access. CRDs are left out of the render (--include-crds is off);
   # objects of CRD kinds (ServiceMonitor, Prometheus...) have no schema in kubeconform and are skipped.

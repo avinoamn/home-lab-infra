@@ -1,0 +1,8 @@
+# The daily check of the Kubernetes API certificate (templates/cert-check.yaml).
+certCheck:
+  schedule: "17 6 * * *"      # daily, 06:17 UTC
+  # The Job fails when the certificate expires in fewer days than this. k3s renews its certificates when it starts
+  # within 120 days of expiry, so a failure means k3s has not restarted in that window (docs/operations.md).
+  minDaysLeft: 60
+  # Keep in step with the Python image in ci/Dockerfile (Dependabot does not update chart templates).
+  image: python:3.14.10-slim-trixie

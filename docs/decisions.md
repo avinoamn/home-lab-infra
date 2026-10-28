@@ -79,3 +79,24 @@ The cost: removing an entry does not delete anything, and offboarding is a separ
 **Its monitors are set up by hand and documented, not managed as code.** A tool that creates monitors from files (AutoKuma) would make them reviewable, but it adds a component, changes the adopted release, and needs an uptime-kuma login stored in the cluster. With a handful of monitors, a table in operations.md plus database backups is enough to rebuild them. Revisit if the list grows or changes often.
 
 **Its database is backed up as a SQL dump to the laptop.** `sqlite3 -readonly .dump` inside the pod gives a consistent copy without stopping it or touching the volume, and the image already has `sqlite3`. The dump holds the webhook and the admin password hash, so it stays off the repository. It is on the list of data that is not code ([#9](../../../issues/9)).
+
+## Cluster health
+
+**The platform's alerts and dashboard are a separate Helm release, `cluster-health`, not part of `kps`.** Upgrading kube-prometheus-stack is heavy for the node. Rules and panels change more often than the stack, and as a small local chart they apply in seconds.
+
+**The rules are a plain Prometheus rule file with unit tests.** `rules.yaml` is what `promtool` checks and tests (`rules_test.yaml` feeds made-up series and checks which alerts fire). The chart only wraps it in a PrometheusRule. This proves "a filling disk raises an alert" without filling a disk.
+
+**The series were trimmed to what dashboards and alerts use, with a recorded budget.** Measured on 2026-10-28, about 6,800 live series grew Prometheus's storage by ~22 MB a day, which would reach the 5 GB cap after ~230 days instead of the intended 365. Most series were exporter internals nobody looked at:
+
+- Prometheus Operator internals (~600)
+- Prometheus's and Alertmanager's own HTTP histograms (~2,200)
+- kube-state-metrics families no panel used (~2,200)
+- per-pod network interfaces (~580), which also churn with every pod
+
+Each exporter now keeps an explicit list, and `make check` fails if a rule or panel uses a metric that is not on it. The cost: ad-hoc exploration in Grafana sees fewer metrics, and a new need means adding to the list first.
+
+**Volumes are covered by the root filesystem's alerts, not per volume.** `local-path` volumes are directories on the node's root filesystem. Their requested size is never enforced, and the kubelet's volume statistics report the whole disk for each of them. So keeping `kubelet_volume_stats_*` (as first planned) would only repeat the disk numbers. Measuring each directory (a `du` CronJob feeding node-exporter) was rejected as more moving parts than the risk warrants.
+
+**A whole-node outage is not reported, for now.** Prometheus, Alertmanager and uptime-kuma all run on the node. An outside dead-man's switch (Alertmanager's Watchdog pinging a service such as healthchecks.io) would cover it, but it needs an external account, so it is left as a known gap. Prometheus or Alertmanager being down alone is reported by uptime-kuma.
+
+**The API certificate is checked by a daily CronJob, not by uptime-kuma.** uptime-kuma sends expiry warnings only for certificates it verifies, and it can verify against a custom CA only in its mTLS mode, which demands a client certificate and key. The CronJob verifies the certificate against the public cluster CA, fails within 60 days of expiry, and an alert on the failed Job notifies. It needs no API token, and it uses metrics that are kept anyway.

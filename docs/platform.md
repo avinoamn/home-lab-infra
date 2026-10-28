@@ -45,6 +45,13 @@ The monitoring stack (Helm release `kps`, kube-prometheus-stack, in namespace `m
 - **Alerts** from a project's PrometheusRules go to one shared Discord channel, grouped by alert name and namespace. Use the `severity` values `critical`, `warning` and `info`.
 - **Grafana** is at NodePort 30004: anonymous viewing, plus an admin login for changes.
 - **Prometheus** is internal (no NodePort). It keeps 365 days of history on a small volume that is sized for a trimmed set of series. Keep metric labels low-cardinality: no IDs, URLs or user names as label values.
+- **Platform metrics are a fixed list.** Everything a project's own ServiceMonitors scrape is kept. Of the platform's exporters, only what a dashboard or alert uses is stored (`platform/monitoring/values.yaml`):
+  - from kube-state-metrics: CronJob created / suspended / last success, `kube_job_status_failed`, container restarts / last termination reason / requests / limits, node conditions and capacity, PVC requested size
+  - from cAdvisor: container CPU and memory working set
+  - the node's CPU, memory, filesystems, disks, network, pressure and temperature
+
+  A project that needs another one asks for it, and it is added with what uses it.
+- **The platform alerts on the node itself** (disk, memory, CPU, exporters, Prometheus storage, the API certificate) to the same Discord channel ([operations.md](operations.md#cluster-health-the-platforms-own-alerts-and-the-node-dashboard)), and the Node dashboard in Grafana's "platform" folder shows CPU and memory per namespace.
 - **uptime-kuma** (NodePort 30001) checks from inside the cluster that the UIs and the platform answer, and notifies the same Discord channel on its own, even when the monitoring stack is down. To have a UI watched, ask at onboarding: its monitor is added by hand and listed in [operations.md](operations.md#uptime-kuma).
 
 ## What a project must not do

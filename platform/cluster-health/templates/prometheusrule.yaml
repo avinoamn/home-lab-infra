@@ -1,0 +1,9 @@
+# The rules live in rules.yaml (Prometheus's rule-file format, so promtool can test them). .Files.Get does not run
+# Helm's templating, so the template expressions in the alert annotations reach Prometheus unchanged.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-health
+  namespace: {{ .Release.Namespace }}
+spec:
+{{ .Files.Get "rules.yaml" | fromYaml | toYaml | indent 2 }}
