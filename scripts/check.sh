@@ -10,6 +10,7 @@ while IFS= read -r -d '' f; do
   [ -f "$f" ] || continue           # listed by git but deleted in the working tree
   files+=("$f")
   case "$f" in
+    */templates/*) ;;                 # Helm templates are not YAML until rendered (checked below with kubeconform)
     *.yml | *.yaml) yaml+=("$f") ;;
     *.sh) shell+=("$f") ;;
   esac
@@ -25,6 +26,10 @@ run() {
 [ ${#yaml[@]} -eq 0 ] || run "yamllint (${#yaml[@]} files)" yamllint --strict "${yaml[@]}"
 [ ${#shell[@]} -eq 0 ] || run "shellcheck (${#shell[@]} files)" shellcheck "${shell[@]}"
 run "private values (${#files[@]} files)" bash scripts/check-private.sh "${files[@]}"
+
+run "projects and registry" python scripts/check-projects.py
+run "project onboarding | kubeconform" bash -c \
+  'set -o pipefail; helm template onboarding projects/chart -f projects/projects.yaml | kubeconform -strict -summary'
 
 if [ -f helmfile.yaml.gotmpl ]; then
   # Downloads the pinned charts, so it needs network access. CRDs are left out of the render (--include-crds is off);

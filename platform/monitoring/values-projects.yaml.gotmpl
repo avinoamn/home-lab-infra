@@ -1,8 +1,10 @@
 {{- /* The namespaces Grafana's sidecars load dashboards and datasources from: `monitoring` plus every project in
-projects/projects.yaml. Onboarding a project adds its namespace here (docs/platform.md). */ -}}
+projects/projects.yaml with `grafana: true`. Onboarding such a project adds its namespace here (docs/onboarding.md). */ -}}
 {{- $namespaces := list "monitoring" }}
 {{- range .Values.projects }}
+{{- if .grafana }}
 {{- $namespaces = append $namespaces .name }}
+{{- end }}
 {{- end }}
 grafana:
   sidecar:

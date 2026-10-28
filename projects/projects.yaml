@@ -1,5 +1,15 @@
-# The projects on the cluster. Each name is also the project's namespace. Helmfile reads this list (environment values
-# in helmfile.yaml.gotmpl): Grafana loads dashboards and datasources only from these namespaces and `monitoring`.
-# Onboarding (#4) adds the rest of each project's entry: its deploy account, ports and hostnames.
+# The projects on the cluster, one entry each. Adding an entry onboards a project (docs/onboarding.md):
+#   name       the project's name, which is also its namespace
+#   grafana    true if Grafana should load dashboards and datasources from its namespace
+#   nodePorts  the NodePorts assigned to it: port and Service name (each also in docs/platform.md's registry)
+#   hosts      the `*.local` Ingress hostnames assigned to it (each also in the registry)
+# scripts/projects.sh renders each entry with projects/chart (namespace, deployer account), and Helmfile reads the
+# list for Grafana's namespaces (platform/monitoring/values-projects.yaml.gotmpl). `make check` checks that the ports
+# and hostnames match the registry.
 projects:
   - name: tickertape
+    grafana: true
+    nodePorts:
+      - {port: 30002, service: ner-ui}
+      - {port: 30003, service: laya-ui}
+    hosts: [ner.local, laya.local]
