@@ -10,24 +10,12 @@ Guidance for AI coding assistants working in this repo (humans: see `README.md` 
 
 Projects on (or heading to) the cluster:
 
-- **tickertape** (`github.com/avinoamn/tickertape`, usually checked out next to this repo as `../tickertape`): the first project, and today still the source of truth for the monitoring stack and its own onboarding. Its `docs/operations.md`, `docs/releasing.md` and `docs/decisions.md` explain how things are set up now. The files to adopt are `k8s/monitoring/values.yaml`, `scripts/install-monitoring.sh`, `scripts/create-monitoring-secrets.sh`, `k8s/namespace.yaml`, `k8s/rbac.yaml`, `scripts/bootstrap-access.sh`, `scripts/kc-admin.sh`.
-- **cubicle** (`github.com/avinoamn/cubicle`, `../cubicle`): a multiplayer 3D hangout, the next project. **It waits for this repo:** the owner finishes this repo's existing issues (#1 to #9) first, and only then onboards cubicle and starts its milestone M6 "Deploy to k3s". So don't add cubicle-specific work to the current issues. Its known needs (its `docs/design.md`, section 1.8): LiveKit with `hostNetwork: true` and host ports 7881/TCP and 7882/UDP on the node's Tailscale address, Traefik serving a `tailscale cert` certificate for the node's `ts.net` name on 443, and Tailscale node sharing with friends. When a decision here (platform contract, port registry, Tailscale policy, guardrails in #8) would rule one of these out, say so and ask instead of deciding silently.
+- **tickertape** (`github.com/avinoamn/tickertape`, usually checked out next to this repo as `../tickertape`): the first project. Its cluster-wide setup (monitoring stack, onboarding, admin scripts) was adopted here by #3 and #4 and removed from tickertape by tickertape#53, so tickertape now describes only its own namespace (its `docs/operations.md`, "What this project needs from the cluster"). The old files are in tickertape's git history before #53. Still open there: tickertape#54 (its Deploy workflow switches to `tag:ci-tickertape`; then `tag:ci` comes out of `tailscale/policy.hujson`).
+- **cubicle** (`github.com/avinoamn/cubicle`, `../cubicle`): a multiplayer 3D hangout, the next project. **It no longer waits for #9:** #1 to #8 are done, and the owner chose (2026-10-29) to onboard cubicle and finish tickertape's move (tickertape#53, #54) before disaster recovery (#9). Cubicle's onboarding gets its own issue here; don't add cubicle-specific work to #9. When #9 is done, its runbook and rehearsal cover every project on the cluster by then, cubicle included. Its known needs (its `docs/design.md`, section 1.8): LiveKit with `hostNetwork: true` and host ports 7881/TCP and 7882/UDP on the node's Tailscale address, Traefik serving a `tailscale cert` certificate for the node's `ts.net` name on 443, and Tailscale node sharing with friends. When a decision here (platform contract, port registry, Tailscale policy, guardrails in #8) would rule one of these out, say so and ask instead of deciding silently.
 
-## Context from tickertape (until tickertape#53 removes its copy)
+## Context from tickertape
 
-What exists today is documented in `../tickertape`. Read the relevant part before starting an issue:
-
-| Issue | Read in `../tickertape` |
-|---|---|
-| #1 (repo, CI, contract) | `docs/decisions.md` ("Operations", "Deploying from GitHub": why no Flux/Argo, NodePorts per UI, anonymous Grafana), `docs/operations.md` "Access model" and "Network exposure", `.github/workflows/ci.yml` (shellcheck, kubeconform, the "CI passed" summary job), `.github/dependabot.yml`, `docs/releasing.md` "Repository settings this relies on" |
-| #2 (node) | `docs/operations.md` "Access model"; the issue body has the read-only inventory from 2026-10-25 |
-| #3 (monitoring) | `k8s/monitoring/values.yaml` (keep its comments), `scripts/install-monitoring.sh`, `scripts/create-monitoring-secrets.sh`, `docs/operations.md` "Monitoring and dashboards" and "Alerts" (with the Discord test `curl`), `charts/tickertape/templates/alerts.yaml` and `dashboards.yaml` (how a project ships rules and dashboards), `scripts/create-grafana-datasource.sh` (how a project ships a datasource) |
-| #4 (onboarding) | `k8s/namespace.yaml`, `k8s/rbac.yaml` (the Role and why each permission), `scripts/bootstrap-access.sh` (writes `~/.kube/tickertape`), `scripts/kc.sh`, `scripts/helm.sh`, `docs/operations.md` "First-time setup" and "Secrets", `docs/releasing.md` "Deploying from GitHub Actions" (the `production` Environment's `KUBE_*` values) and "Rotating and revoking" |
-| #5 (uptime-kuma) | nothing; it was installed by hand (see `CLAUDE.local.md`) |
-| #6 (Tailscale) | `docs/releasing.md` "Deploying from GitHub Actions" → "One-time setup" (today's `tag:ci` grant, the OIDC trust credential, why no allow-all rule), `.github/workflows/deploy.yml` |
-| #7 (cluster alerts) | `k8s/monitoring/values.yaml` (the trimmed scrape set and the series budget), tickertape#37 (the manual watch list this replaces) |
-| #8 (guardrails) | `charts/tickertape/values.yaml` (resource requests/limits), the Grafana dashboards (real usage), `docs/architecture.md` "Kubernetes layout" |
-| #9 (disaster recovery) | `docs/operations.md` "Backups" and "Restoring", `docs/releasing.md` "Rotating and revoking" |
+For #9 (disaster recovery), read tickertape's `docs/operations.md` "Backups" and "Restoring" (its own data and restore), and `docs/releasing.md` "Deploying from GitHub Actions" (the `production` Environment's `KUBE_*` values that change on a new cluster).
 
 ## Rules
 
