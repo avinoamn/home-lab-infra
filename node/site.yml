@@ -11,3 +11,4 @@
     - k3s
     - node_tools
     - admin_kubeconfig
+    - tailscale_cert

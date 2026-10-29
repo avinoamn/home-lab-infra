@@ -1,0 +1,12 @@
+# {{ ansible_managed }} (node/roles/tailscale_cert)
+[Unit]
+Description=Daily check of the node's Tailscale HTTPS certificate
+
+[Timer]
+OnCalendar=*-*-* 05:41:00
+RandomizedDelaySec=30min
+# A run missed while the node was off happens at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
