@@ -22,12 +22,12 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 |---|---|---|---|
 | The node (Ubuntu, Tailscale, k3s) | | **this repository**, [`node/`](node/) (Ansible) | done ([#2](../../issues/2)) |
 | Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | **this repository**, [`platform/monitoring/`](platform/monitoring/) | done ([#3](../../issues/3)) |
-| Namespace and `deployer` account for each project | `tickertape` | **this repository**, [`projects/`](projects/) | done ([#4](../../issues/4)) |
+| Namespace and `deployer` account for each project | `tickertape`, `cubicle` | **this repository**, [`projects/`](projects/) | done ([#4](../../issues/4)) |
 | uptime-kuma (Helm release `uptime-kuma`) | `tools` | **this repository**, [`platform/uptime-kuma/`](platform/uptime-kuma/) (its monitors: [docs/operations.md](docs/operations.md#uptime-kuma)) | done ([#5](../../issues/5)) |
 | Tailscale policy | | **this repository**, [`tailscale/policy.hujson`](tailscale/policy.hujson), pasted into the console | done ([#6](../../issues/6)) |
 | Traefik, CoreDNS, local-path storage, metrics-server | `kube-system` | bundled with k3s | stays with k3s |
 
-Projects: [tickertape](https://github.com/avinoamn/tickertape) (RSS feeds, NER and Grafana dashboards) runs on the cluster now. [cubicle](https://github.com/avinoamn/cubicle) (a small multiplayer 3D hangout) is next.
+Projects: [tickertape](https://github.com/avinoamn/tickertape) (RSS feeds, NER and Grafana dashboards) runs on the cluster now. [cubicle](https://github.com/avinoamn/cubicle) (a small multiplayer 3D hangout) is being onboarded ([#25](../../issues/25)).
 
 ## Layout
 

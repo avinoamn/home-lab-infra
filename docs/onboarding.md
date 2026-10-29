@@ -6,7 +6,7 @@ A project gets:
 
 - a namespace, named after the project
 - a `deployer` ServiceAccount with a long-lived token, allowed to manage workloads in that namespace and nothing else (the permissions, each with its reason, are in [`projects/chart/templates/project.yaml`](../projects/chart/templates/project.yaml))
-- the NodePorts and `*.local` hostnames assigned to it in the registry
+- the NodePorts, `*.local` hostnames and host ports assigned to it in the registry (or the node's tailnet name on 443, which only one project can have: see [platform.md](platform.md#network))
 - if it wants: Grafana loading dashboards and datasources from its namespace
 
 Steps 1 to 4 need admin access to the node (see [operations.md](operations.md), "Admin access"). The steps after that happen in the project's own repository and in GitHub.

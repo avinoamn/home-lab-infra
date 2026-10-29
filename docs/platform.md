@@ -32,6 +32,7 @@ It can also read logs and events, and use `exec` and `port-forward`. It cannot t
 
 - **A NodePort for each web UI**, assigned in the [registry](#registry) below. It opens as `http://<node>:<port>` from any device on the LAN or the tailnet, with nothing to set up on the device.
 - **Traefik** (bundled with k3s) serves Ingresses on port 80 for `*.local` hostnames from the registry. See [how `*.local` names resolve](#how-local-names-resolve).
+- **HTTPS on the node's tailnet name.** The node's MagicDNS name, `<node>.<tailnet>.ts.net`, can have a real certificate from Tailscale (`tailscale cert`, Let's Encrypt). Traefik serves it on 443 with an Ingress for that host, using a TLS Secret in the project's namespace. There is one such name per node and only one project can own it; the registry says which. A UI that needs a secure page (browsers allow camera and microphone only on HTTPS) uses it. The name ends up in the public certificate logs.
 - **Tailscale.** The node is on the tailnet as `tag:k3s`. Your own devices reach everything. A project's GitHub runners join as `tag:ci-<project>` and reach only the API and that project's NodePorts (`tailscale/policy.hujson`).
 
 ### Monitoring and alerts
@@ -134,17 +135,26 @@ Every NodePort, Ingress hostname and host port in use. The NodePort range is k3s
 | 30393 | k3s | `kube-system` | `traefik` | Traefik's 443, assigned by Kubernetes (LoadBalancer Services get NodePorts too) |
 | 31963 | k3s | `kube-system` | `traefik` | Traefik's 80, assigned by Kubernetes |
 
-### Ingress hostnames (Traefik, port 80)
+### Ingress hostnames (Traefik)
+
+`*.local` names on port 80, and the node's tailnet name on 443 with its Tailscale certificate.
 
 | Hostname | Project | Namespace |
 |---|---|---|
 | `grafana.local` | platform | `monitoring` |
 | `ner.local` | tickertape | `tickertape` |
 | `laya.local` | tickertape | `tickertape` |
+| `<node>.<tailnet>.ts.net` | cubicle | `cubicle` |
 
 ### Host ports
 
-None assigned yet. A project that needs `hostNetwork` or `hostPort` lists each port here, in a table with the columns Port, Protocol, Project and Reason, and gets `podSecurity: privileged` in its entry (`make check` refuses `privileged` without a row here).
+A project that needs `hostNetwork` or `hostPort` lists each port here, and gets `podSecurity: privileged` in its entry. `make check` refuses `privileged` without a row here, and a row here without `privileged`. A pod on the host network takes its ports on every address of the node (LAN and tailnet), and NetworkPolicies don't cover it.
+
+| Port | Protocol | Project | Reason |
+|---|---|---|---|
+| 7880 | TCP | cubicle | LiveKit's signaling (WebSocket). LiveKit runs on the host network for its media ports, so this one is on the host too; browsers reach it through Traefik on the node's tailnet name, path `/rtc` |
+| 7881 | TCP | cubicle | LiveKit's WebRTC media over TCP, when UDP is blocked. Browsers connect to it directly on the node's Tailscale address |
+| 7882 | UDP | cubicle | LiveKit's WebRTC media (voice and face video), all on one UDP port. Browsers connect to it directly on the node's Tailscale address |
 
 ### How `*.local` names resolve
 
