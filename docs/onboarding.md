@@ -24,6 +24,7 @@ On a branch of this repository:
        - {port: 30005, service: myproject-ui}
      hosts: [myproject.local]
      podSecurity: baseline                  # privileged only with host ports in the registry
+     # shared: ["tcp:443"]                 # only if friends the node is shared with need it (Tailscale sharing)
      quota:                                 # from what it really uses, with room for Jobs and rollouts
        requests.cpu: "1"
        requests.memory: 2Gi

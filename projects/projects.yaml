@@ -6,6 +6,9 @@
 #              their number is also the quota's NodePort count
 #   hosts      the Ingress hostnames assigned to it (each also in the registry): `*.local` names, or
 #              `<node>.<tailnet>.ts.net` for the node's own tailnet name (HTTPS on 443; one project only)
+#   shared     what friends the node is shared with (Tailscale node sharing, `autogroup:shared`) may reach on it, as
+#              `tcp:<port>` or `udp:<port>`: tcp:443 for a project that owns the node's tailnet name, or the project's
+#              registered host ports. Leave it out for none. Generates their grant in tailscale/policy.hujson.
 #   podSecurity  Pod Security level of its namespace: baseline (the default rule: no host network, host ports,
 #              hostPath or privileged containers), restricted, or privileged (only with host ports registered in
 #              docs/platform.md, and the reason recorded there)
@@ -38,6 +41,9 @@ projects:
     hosts: ["<node>.<tailnet>.ts.net"]
     # LiveKit runs on the host network for its media ports (the registry's host ports, with the reason).
     podSecurity: privileged
+    # Friends open https://<node>.<tailnet>.ts.net (443; /rtc reaches LiveKit's signaling through Traefik) and send
+    # media straight to LiveKit (7881/TCP, 7882/UDP). Not 7880, SSH, the API or the platform's UIs.
+    shared: ["tcp:443", "tcp:7881", "udp:7882"]
     # Estimated from cubicle's design (section 1.7), not yet measured: the cubicle server 100m / 128Mi (limit 256Mi),
     # LiveKit 500m / 512Mi (limit 1Gi). Room for a RollingUpdate of the server (LiveKit uses Recreate) and one stray
     # pod. No volumes: all its state is in memory.

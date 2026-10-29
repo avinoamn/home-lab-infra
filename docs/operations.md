@@ -234,6 +234,8 @@ The tailnet policy is `tailscale/policy.hujson` ([its README](../tailscale/READM
 3. Save. The console runs the file's `tests` and refuses to save if one fails, so a bad policy never goes live.
 4. Paste it unchanged every time, so the live policy stays identical to the file.
 
+**Sharing the node with friends** (for cubicle). In the admin console, Machines, the node's menu, Share: invite each friend by email, or create a single-use invite link per friend (treat it like a password; unused links expire after 30 days). The friend accepts it into their own tailnet and then reaches the node by its ts.net name, but only on the ports in the `autogroup:shared` grant (`shared` in `projects/projects.yaml`). The same page lists who has accepted and revokes a share. A share gives no access to the rest of the tailnet.
+
 **The node is tagged `tag:k3s`** (Machines, the node's menu, Edit tags). A tagged device belongs to the tag instead of a user. Tagging in the console keeps the device's key expiry, so it was turned off separately (the node's menu, Disable key expiry); the console shows "Expiry disabled". To make it user-owned again, re-authenticate it without tags on the node (`sudo tailscale up --advertise-tags= --force-reauth`, then log in as the user).
 
 ## Projects' guardrails
