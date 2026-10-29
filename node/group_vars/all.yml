@@ -38,3 +38,7 @@ tailscale_cert_secret: cubicle-tls
 # A daily run asks for a new certificate once less than this is left: two weeks of daily retries before it expires.
 # It must stay well under the certificate's lifetime (90 days now; Let's Encrypt plans 45), or every run renews.
 tailscale_cert_min_validity: 336h
+
+# The most a UDP socket may ask for, each way (node/roles/udp_buffers): what LiveKit asks for (defaultUDPBufferSize in
+# LiveKit's mediatransportutil, v1.13.11). It warns below 5,000,000.
+udp_buffer_max_bytes: 16777216

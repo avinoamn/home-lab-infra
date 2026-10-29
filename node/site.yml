@@ -12,3 +12,4 @@
     - node_tools
     - admin_kubeconfig
     - tailscale_cert
+    - udp_buffers
