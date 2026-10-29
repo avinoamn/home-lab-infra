@@ -54,8 +54,9 @@ CI (`.github/workflows/ci.yml`) runs `make check` on every pull request and on `
 
 1. [#1](../../issues/1) Set up this repository: layout, tooling, CI, and the platform contract.
 2. Adopt what runs today, each one a no-op against the live cluster: the monitoring stack ([#3](../../issues/3)), project onboarding ([#4](../../issues/4)), uptime-kuma ([#5](../../issues/5)), the Tailscale policy ([#6](../../issues/6)) and the node itself ([#2](../../issues/2)).
-3. Then improve it: cluster health alerts ([#7](../../issues/7)), guardrails between projects ([#8](../../issues/8)), and a rehearsed disaster recovery ([#9](../../issues/9)).
+3. Then improve it: cluster health alerts ([#7](../../issues/7)) and guardrails between projects ([#8](../../issues/8)).
 4. Onboard the second project, [cubicle](https://github.com/avinoamn/cubicle), through the finished onboarding path.
+5. Write down and rehearse disaster recovery ([#9](../../issues/9)) once every project is on the cluster, so the runbook covers them all.
 
 ## Principles
 
