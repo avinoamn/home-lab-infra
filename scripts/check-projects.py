@@ -11,7 +11,8 @@ import yaml
 REGISTRY = "docs/platform.md"
 PROJECTS = "projects/projects.yaml"
 
-QUOTA_KEYS = {"requests.cpu", "requests.memory", "limits.memory", "pods", "persistentvolumeclaims", "requests.storage"}
+TAILNET_NAME = "<node>.<tailnet>.ts.net"   # the node's MagicDNS name, served by Traefik on 443
+QUOTA_KEYS ={"requests.cpu", "requests.memory", "limits.memory", "pods", "persistentvolumeclaims", "requests.storage"}
 
 errors = []
 
@@ -33,7 +34,9 @@ ports = table_rows(text, "### NodePorts")            # Port | Project | Namespac
 hosts = table_rows(text, "### Ingress hostnames")    # Hostname | Project | Namespace
 host_ports = [r for r in table_rows(text, "### Host ports") if len(r) >= 3]   # Port | Protocol | Project | Reason
 
-for kind, column in (("NodePort", [r[0] for r in ports]), ("hostname", [r[0] for r in hosts])):
+host_port_keys = [f"{r[0]}/{r[1]}" for r in host_ports]
+for kind, column in (("NodePort", [r[0] for r in ports]), ("hostname", [r[0] for r in hosts]),
+                     ("host port", host_port_keys)):
     for value in {v for v in column if column.count(v) > 1}:
         errors.append(f"{REGISTRY}: {kind} {value} is listed more than once")
 
@@ -51,6 +54,8 @@ for p in projects:
         errors.append(f"{PROJECTS}: {name}: podSecurity must be baseline, restricted or privileged")
     if level == "privileged" and not any(r[2] == name for r in host_ports):
         errors.append(f"{PROJECTS}: {name}: podSecurity privileged needs its host ports in the registry ({REGISTRY})")
+    if level != "privileged" and any(r[2] == name for r in host_ports):
+        errors.append(f"{PROJECTS}: {name}: the registry assigns it host ports, which need podSecurity privileged")
     quota = p.get("quota") or {}
     for key in sorted(QUOTA_KEYS - set(quota)):
         errors.append(f"{PROJECTS}: {name}: quota needs {key}")
@@ -72,11 +77,12 @@ for p in projects:
     for host in sorted(have_hosts - want_hosts):
         errors.append(f"{PROJECTS}: {name}: the registry assigns hostname {host}, the entry does not")
     for host in want_hosts:
-        if not re.fullmatch(r"[a-z0-9-]+\.local", host):
-            errors.append(f"{PROJECTS}: {name}: hostname {host} is not of the form <name>.local")
+        # The node's own tailnet name is written as this placeholder: the real one is private.
+        if not (re.fullmatch(r"[a-z0-9-]+\.local", host) or host == TAILNET_NAME):
+            errors.append(f"{PROJECTS}: {name}: hostname {host} is not of the form <name>.local or {TAILNET_NAME}")
 
 # Registry rows that name a project which is not in the list (k3s and platform rows are fine).
-for project in sorted({r[1] for r in ports + hosts} - set(names) - {"platform", "k3s"}):
+for project in sorted(({r[1] for r in ports + hosts} | {r[2] for r in host_ports}) - set(names) - {"platform", "k3s"}):
     errors.append(f"{REGISTRY}: the registry names project {project}, which is not in {PROJECTS}")
 
 for e in errors:

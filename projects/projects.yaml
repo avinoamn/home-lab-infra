@@ -4,7 +4,8 @@
 #              ConfigMaps and Secrets)
 #   nodePorts  the NodePorts assigned to it: port and Service name (each also in docs/platform.md's registry);
 #              their number is also the quota's NodePort count
-#   hosts      the `*.local` Ingress hostnames assigned to it (each also in the registry)
+#   hosts      the Ingress hostnames assigned to it (each also in the registry): `*.local` names, or
+#              `<node>.<tailnet>.ts.net` for the node's own tailnet name (HTTPS on 443; one project only)
 #   podSecurity  Pod Security level of its namespace: baseline (the default rule: no host network, host ports,
 #              hostPath or privileged containers), restricted, or privileged (only with host ports registered in
 #              docs/platform.md, and the reason recorded there)
@@ -30,3 +31,20 @@ projects:
       pods: "30"
       persistentvolumeclaims: "10"
       requests.storage: 30Gi
+  - name: cubicle
+    grafana: false
+    nodePorts: []
+    # Its web UI needs HTTPS (camera and mic), so it is served on the node's tailnet name, not on a NodePort.
+    hosts: ["<node>.<tailnet>.ts.net"]
+    # LiveKit runs on the host network for its media ports (the registry's host ports, with the reason).
+    podSecurity: privileged
+    # Estimated from cubicle's design (section 1.7), not yet measured: the cubicle server 100m / 128Mi (limit 256Mi),
+    # LiveKit 500m / 512Mi (limit 1Gi). Room for a RollingUpdate of the server (LiveKit uses Recreate) and one stray
+    # pod. No volumes: all its state is in memory.
+    quota:
+      requests.cpu: "1"
+      requests.memory: 1Gi
+      limits.memory: 2Gi
+      pods: "6"
+      persistentvolumeclaims: "0"
+      requests.storage: "0"
