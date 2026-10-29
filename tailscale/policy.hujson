@@ -18,9 +18,11 @@
     // such as a project's CI runner.
     {"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
 
+    // Friends the node is shared with (autogroup:shared) reach only the ports the projects list under `shared`.
     // BEGIN projects: each project's CI tag reaches the cluster API and its own NodePorts, nothing else.
     {"src": ["tag:ci-tickertape"], "dst": ["tag:k3s"], "ip": ["tcp:6443", "tcp:30002", "tcp:30003"]},
     {"src": ["tag:ci-cubicle"], "dst": ["tag:k3s"], "ip": ["tcp:6443"]},
+    {"src": ["autogroup:shared"], "dst": ["tag:k3s"], "ip": ["tcp:443", "tcp:7881", "udp:7882"]},
     // END projects
   ],
 
@@ -36,6 +38,7 @@
 
   // Checked every time the policy is saved: the console refuses to save a policy whose tests fail.
   "tests": [
+    // autogroup:shared can't be a test's source; make check guards its grant instead (tailscale/README.md).
     // BEGIN projects: each project's CI tag reaches the API and its own NodePorts, and not SSH or the others.
     {
       "src": "tag:ci-tickertape",

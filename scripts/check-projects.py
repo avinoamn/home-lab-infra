@@ -76,6 +76,16 @@ for p in projects:
         errors.append(f"{REGISTRY}: hostname {host} of {name} is missing from the registry")
     for host in sorted(have_hosts - want_hosts):
         errors.append(f"{PROJECTS}: {name}: the registry assigns hostname {host}, the entry does not")
+    # What friends the node is shared with may reach: the tailnet name's 443, or the project's own host ports.
+    for entry in p.get("shared") or []:
+        m = re.fullmatch(r"(tcp|udp):(\d+)", str(entry))
+        if not m:
+            errors.append(f"{PROJECTS}: {name}: shared entry {entry} is not tcp:<port> or udp:<port>")
+        elif entry == "tcp:443":
+            if TAILNET_NAME not in want_hosts:
+                errors.append(f"{PROJECTS}: {name}: shared tcp:443 needs the node's tailnet name in its hosts")
+        elif not any(r[0] == m[2] and r[1].lower() == m[1] and r[2] == name for r in host_ports):
+            errors.append(f"{PROJECTS}: {name}: shared {entry} is not a host port the registry assigns it")
     for host in want_hosts:
         # The node's own tailnet name is written as this placeholder: the real one is private.
         if not (re.fullmatch(r"[a-z0-9-]+\.local", host) or host == TAILNET_NAME):

@@ -5,7 +5,10 @@
 
 Each project gets a CI tag `tag:ci-<project>` (owned by the admins), a grant from it to `tag:k3s` on the API port and
 the project's own NodePorts, and a test that it reaches those and not SSH or any other NodePort in the registry
-(docs/platform.md). The check also parses the whole file (HuJSON: JSON with comments and trailing commas) and fails
+(docs/platform.md). Friends the node is shared with (`autogroup:shared`) get one grant to `tag:k3s` on the ports the
+projects list under `shared` (scripts/check-projects.py checks those against the registry). The policy's tests can't
+cover them: a test's source must be a user, group, tag or host, not an autogroup, and friends' emails are private. So
+the check here makes sure that grant is the only one from `autogroup:shared`. The check also parses the whole file (HuJSON: JSON with comments and trailing commas) and fails
 if a grant comes from "*" (it would match tagged devices too) or a tag is used without an owner.
 Run by scripts/check.sh. Needs PyYAML (in the tools image).
 """
@@ -17,6 +20,7 @@ import yaml
 
 POLICY = "tailscale/policy.hujson"
 API_PORT = 6443
+SHARED = "autogroup:shared"   # users who accepted a share of a device of this tailnet (the node)
 projects = yaml.safe_load(open("projects/projects.yaml", encoding="utf-8"))["projects"]
 
 # Every NodePort in the registry, so a project's test can deny all the ones that are not its own.
@@ -34,7 +38,16 @@ def blocks():
         accept = ", ".join(f'"tag:k3s:{port}"' for port in [API_PORT] + own)
         deny = ", ".join(f'"tag:k3s:{port}"' for port in [22] + [n for n in all_nodeports if n not in own])
         tests += ["    {", f'      "src": "{tag}",', f'      "accept": [{accept}],', f'      "deny": [{deny}],', "    },"]
+    if shared_ports():
+        ports = ", ".join(f'"{port}"' for port in shared_ports())
+        grants.append(f'    {{"src": ["{SHARED}"], "dst": ["tag:k3s"], "ip": [{ports}]}},')
     return owners, grants, tests
+
+
+def shared_ports():
+    """Every port some project lets friends reach (its `shared` list), in port order."""
+    ports = {entry for p in projects for entry in p.get("shared") or []}
+    return sorted(ports, key=lambda e: (int(e.split(":")[1]), e))
 
 
 def render(text):
@@ -84,6 +97,9 @@ def check(policy):
                 errors.append(f"{tag} is used in a grant but has no tagOwners entry")
         if any(t.startswith("tag:ci-") for t in g.get("src", [])) and "*" in g.get("dst", []):
             errors.append(f"a project's CI tag may not reach \"*\": {g}")
+    shared = [g for g in policy.get("grants", []) if SHARED in g.get("src", [])]
+    if [(g.get("dst"), g.get("ip")) for g in shared] != ([(["tag:k3s"], shared_ports())] if shared_ports() else []):
+        errors.append(f"{SHARED} may only be in the generated grant to tag:k3s on the projects' `shared` ports: {shared}")
     tested = {t.get("src") for t in policy.get("tests", [])}
     for p in projects:
         if f"tag:ci-{p['name']}" not in tested:
