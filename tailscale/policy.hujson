@@ -7,8 +7,6 @@
   "tagOwners": {
     // The k3s node. Tagged in the console, with key expiry disabled there (a separate step).
     "tag:k3s": ["autogroup:admin"],
-    // The shared CI tag, until tickertape's Deploy workflow uses its own (avinoamn/tickertape#54). Then removed.
-    "tag:ci": ["autogroup:admin"],
     // BEGIN projects: one CI tag per project, for its GitHub Actions runners (ephemeral nodes).
     "tag:ci-tickertape": ["autogroup:admin"],
     // END projects
@@ -18,9 +16,6 @@
     // Your own devices can reach each other and everything else. Not "*": that would also match tagged devices,
     // such as a project's CI runner.
     {"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
-
-    // The shared CI tag, until avinoamn/tickertape#54: the API and the UI ports it had before.
-    {"src": ["tag:ci"], "dst": ["tag:k3s"], "ip": ["tcp:6443", "tcp:30002", "tcp:30003", "tcp:30004"]},
 
     // BEGIN projects: each project's CI tag reaches the cluster API and its own NodePorts, nothing else.
     {"src": ["tag:ci-tickertape"], "dst": ["tag:k3s"], "ip": ["tcp:6443", "tcp:30002", "tcp:30003"]},
@@ -39,11 +34,6 @@
 
   // Checked every time the policy is saved: the console refuses to save a policy whose tests fail.
   "tests": [
-    {
-      "src": "tag:ci",
-      "accept": ["tag:k3s:6443", "tag:k3s:30002", "tag:k3s:30004"],
-      "deny": ["tag:k3s:22", "tag:k3s:5432"],
-    },
     // BEGIN projects: each project's CI tag reaches the API and its own NodePorts, and not SSH or the others.
     {
       "src": "tag:ci-tickertape",

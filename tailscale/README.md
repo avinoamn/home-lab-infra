@@ -5,7 +5,7 @@
 - **Your own devices** (`autogroup:member`) reach everything. The rule is deliberately not `"*"`, which would also match tagged devices.
 - **The node is `tag:k3s`.** The file refers to it by tag, never by address. Its key expiry is disabled too: a separate console step, because tagging in the console does not change it.
 - **Each project has a CI tag, `tag:ci-<project>`,** for its GitHub Actions runners (ephemeral nodes that join through an OIDC trust credential). It reaches only the cluster API (6443) and the project's own NodePorts. These parts are generated from [`projects/projects.yaml`](../projects/projects.yaml) by `scripts/gen-tailscale-policy.py`.
-- **The shared `tag:ci`** stays until tickertape's workflow uses its own tag ([avinoamn/tickertape#54](https://github.com/avinoamn/tickertape/issues/54)), then it is removed.
+- **There is no shared CI tag.** tickertape's workflow used a shared `tag:ci` until it switched to `tag:ci-tickertape` ([avinoamn/tickertape#54](https://github.com/avinoamn/tickertape/issues/54)), and the shared tag was removed.
 
 The file's `tests` run in the console on every save, and a failing test refuses the save. `make check` checks:
 
