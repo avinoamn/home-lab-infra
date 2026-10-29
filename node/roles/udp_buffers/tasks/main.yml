@@ -1,0 +1,16 @@
+# Bigger UDP socket buffers, for cubicle's LiveKit on the host network (docs/operations.md, "The node"). LiveKit asks
+# the kernel for udp_buffer_max_bytes per socket and warns when it gets less; Ubuntu's cap is 212,992 bytes. The cap
+# only limits what a socket may ask for, so sockets that don't ask keep their small default.
+
+- name: The UDP buffer limits are set at boot
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/60-udp-buffers.conf
+    content: |
+      # Managed by home-lab-infra (node/roles/udp_buffers): LiveKit asks for this much per UDP socket.
+      net.core.rmem_max = {{ udp_buffer_max_bytes }}
+      net.core.wmem_max = {{ udp_buffer_max_bytes }}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Load the UDP buffer limits

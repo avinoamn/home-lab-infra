@@ -28,7 +28,7 @@ The node's Ansible playbook installs them at the pinned versions (`node/group_va
 
 ## The node
 
-The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools, the admin kubeconfig and the certificate timer for the node's tailnet name. Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
+The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools, the admin kubeconfig, the certificate timer for the node's tailnet name, and bigger UDP socket buffers for cubicle's LiveKit (`node/roles/udp_buffers`: `net.core.rmem_max` and `wmem_max` at 16 MiB, what LiveKit asks for per socket; Ubuntu's 208 KiB made it warn at every start and could drop video in bursts. A change takes effect for LiveKit when it restarts). Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
 
 ```sh
 scripts/node.sh check    # read-only: what a run would change (--check --diff). Expect changed=0.

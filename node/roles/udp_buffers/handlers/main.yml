@@ -1,0 +1,6 @@
+# Loads the limits now, not only at the next boot. A check run skips it (the command module can't predict its result).
+# LiveKit picks them up when it restarts.
+- name: Load the UDP buffer limits
+  become: true
+  ansible.builtin.command: sysctl --load=/etc/sysctl.d/60-udp-buffers.conf
+  changed_when: true
