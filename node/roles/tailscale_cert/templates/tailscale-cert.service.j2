@@ -1,0 +1,11 @@
+# {{ ansible_managed }} (node/roles/tailscale_cert)
+[Unit]
+Description=Renew the node's Tailscale HTTPS certificate and load it into Kubernetes
+Wants=network-online.target
+After=network-online.target tailscaled.service k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tailscale-cert-to-secret
+PrivateTmp=true
+NoNewPrivileges=true

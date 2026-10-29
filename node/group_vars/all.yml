@@ -30,3 +30,11 @@ base_packages:
   - python3
   - unattended-upgrades
   - vim
+
+# The node's tailnet name on 443 (node/roles/tailscale_cert): its Tailscale certificate goes into this TLS Secret, in
+# the namespace of the project that owns the name (docs/platform.md, registry, "Ingress hostnames").
+tailscale_cert_namespace: cubicle
+tailscale_cert_secret: cubicle-tls
+# A daily run asks for a new certificate once less than this is left: two weeks of daily retries before it expires.
+# It must stay well under the certificate's lifetime (90 days now; Let's Encrypt plans 45), or every run renews.
+tailscale_cert_min_validity: 336h

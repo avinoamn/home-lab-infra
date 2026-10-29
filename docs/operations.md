@@ -28,7 +28,7 @@ The node's Ansible playbook installs them at the pinned versions (`node/group_va
 
 ## The node
 
-The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools and the admin kubeconfig. Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
+The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools, the admin kubeconfig and the certificate timer for the node's tailnet name. Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
 
 ```sh
 scripts/node.sh check    # read-only: what a run would change (--check --diff). Expect changed=0.
@@ -69,7 +69,24 @@ For a new or rebuilt server (disaster recovery is [#9](../../../issues/9)):
    - `scripts/create-monitoring-secrets.sh`
    - `scripts/helmfile.sh apply`
    - `scripts/projects.sh apply <project>` for each project
+   - the tailnet name's certificate: `sudo systemctl start tailscale-cert.service` on the node, once the owning project's namespace exists (below)
 6. Projects deploy themselves again. Their data comes back from backups ([#9](../../../issues/9)).
+
+### The tailnet name's certificate
+
+The node's MagicDNS name, `<node>.<tailnet>.ts.net`, is served by Traefik on 443 with a real certificate from Tailscale (Let's Encrypt). It belongs to one project, cubicle ([platform.md](platform.md#ingress-hostnames-traefik)), whose Ingress names the TLS Secret `cubicle-tls`. The node keeps that Secret up to date:
+
+- **`tailscale-cert.timer`** runs `tailscale-cert.service` daily (around 05:41 UTC, and at boot if a run was missed). It runs `/usr/local/sbin/tailscale-cert-to-secret` as root: it reads the name from `tailscale status`, runs `tailscale cert --min-validity 336h`, and applies the certificate and key as the Secret with k3s's own kubeconfig. The key is only ever in a private temporary directory and in the Secret.
+- **Renewal:** tailscaled caches the certificate and asks Let's Encrypt for a new one only when less than two weeks are left, so most runs load the same certificate and the Secret doesn't change. Traefik picks up a changed Secret by itself.
+- **Set up by the node playbook** (`node/roles/tailscale_cert`, names in `node/group_vars/all.yml`). The first certificate needs two things the playbook can't do: HTTPS certificates turned on for the tailnet (admin console, DNS page, "Enable HTTPS"; MagicDNS must be on), and the project's namespace. Then run it once by hand.
+
+```sh
+ssh -t computa 'sudo systemctl start tailscale-cert.service'                 # run it now
+ssh computa 'systemctl list-timers tailscale-cert.timer'                     # when it runs next
+ssh -t computa 'sudo journalctl -u tailscale-cert.service -n 20 --no-pager'  # the last runs: subject and expiry date
+```
+
+A failed run leaves the old Secret in place. If it fails for two weeks, the certificate expires and browsers refuse the page; the usual causes are HTTPS turned off in the tailnet (the script says so) or a Let's Encrypt rate limit after many manual runs (wait a day and a half). Every certificate is in the public Certificate Transparency logs, so the node's and the tailnet's names are public.
 
 ## Applying a change
 

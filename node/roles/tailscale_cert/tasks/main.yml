@@ -1,0 +1,34 @@
+# The node's tailnet name on 443 (docs/platform.md, "Network"): a daily systemd timer gets its Tailscale HTTPS
+# certificate and loads it into a TLS Secret for Traefik. Root runs it, with k3s's own kubeconfig, so no credential
+# leaves the node. The first certificate needs HTTPS turned on in the tailnet and the project's namespace to exist;
+# then run it once by hand (docs/operations.md, "The tailnet name's certificate").
+
+- name: The script that renews the certificate and loads it into the Secret
+  become: true
+  ansible.builtin.template:
+    src: tailscale-cert-to-secret.sh.j2
+    dest: /usr/local/sbin/tailscale-cert-to-secret
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Its systemd service and daily timer
+  become: true
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [tailscale-cert.service, tailscale-cert.timer]
+  register: tailscale_cert_units
+
+# A check run can't enable a timer that isn't installed yet, so it skips this step until the units exist.
+- name: The timer is enabled and running
+  become: true
+  when: not (ansible_check_mode and tailscale_cert_units is changed)
+  ansible.builtin.systemd_service:
+    name: tailscale-cert.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ tailscale_cert_units is changed }}"
