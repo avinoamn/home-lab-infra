@@ -244,6 +244,7 @@ Each project namespace has a ResourceQuota, a LimitRange, two NetworkPolicies an
 
 - **How full the quota is:** `scripts/kc-admin.sh describe resourcequota project-quota -n <project>`. A pod refused by the quota shows up as `FailedCreate` in its Deployment's, ReplicaSet's or Job's events (`scripts/kc-admin.sh get events -n <project>`), not as a pod.
 - **A rollout stuck on the quota:** raise the quota in the entry, or switch the workload to `Recreate`.
+- **A Job fails with "Connection refused" to a service in its own namespace:** it most likely connected in its first second, before the policies let the new pod in ([platform.md](platform.md#guardrails)). Make it wait for the service first; lifting the policies is not the fix.
 - **Something can't connect after a policy change:** NetworkPolicies take effect at once. To lift them while investigating (this changes the cluster), delete the allow-list and default-deny for that project, then re-apply with `projects.sh` when fixed. `projects.sh` never deletes anything, so they stay away until then:
 
   ```sh

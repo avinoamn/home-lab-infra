@@ -98,6 +98,8 @@ A pod that would go over is refused when it is created, so the error shows up in
 
 Other projects' pods cannot connect, not even through the node's NodePorts. The kubelet's health probes always pass. Outgoing traffic is not restricted. A project that must accept traffic from another project asks for it here. Pods on the host network are not covered by NetworkPolicies, which is one more reason they are the exception.
 
+A new pod is let in only a moment after it has started: k3s's policy controller adds its address to the allowed sources when it sees the pod running. Until then, its connections into a namespace with these policies are refused, its own namespace included. Long-running services don't notice, but a Job or init container that connects as soon as it starts does. tickertape's backup `pg_dump` connected within a second and failed with "Connection refused" every night until it waited first (tickertape#67).
+
 **Pod Security** (the namespace label `pod-security.kubernetes.io/enforce`) is `baseline` by default: no host network, host ports, `hostPath`, privileged containers or added capabilities. A project whose registered host ports need the host network gets `privileged`, with the reason in the registry. `restricted` is available for a project that wants the stricter level.
 
 **PriorityClasses** decide which pods the scheduler places first and which the kubelet evicts last when the node runs short of memory:
@@ -117,6 +119,7 @@ A project references them by name (`priorityClassName`).
 - **Fit the quota, rollouts included** (see "Guardrails"), and give the database `project-data` and work that can wait `project-batch`.
 - **Pin images to exact versions,** never `latest` or another tag that moves. With a moving tag, what runs depends on what the node happened to cache.
 - **Keep its Secrets out of git.** Create them in the namespace, from a script or the deploy workflow.
+- **Wait before connecting from a short-lived pod.** A Job or init container that connects to something in the namespace must retry or wait for it first (for example `until pg_isready; do sleep 2; done`, with a limit), because a new pod's first connections are refused (see "Guardrails").
 - **Back up its own data,** off the node, and test the restore. `local-path` volumes die with the disk.
 - **Register ports and hostnames here before using them,** in the same pull request that onboards the project or changes its entry.
 
