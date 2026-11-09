@@ -13,3 +13,4 @@
     - admin_kubeconfig
     - tailscale_cert
     - udp_buffers
+    - drift_check

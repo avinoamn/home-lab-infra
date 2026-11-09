@@ -21,6 +21,7 @@ The cluster is one small server (4 cores, 15 GiB RAM) running k3s. Several proje
 | Piece | Namespace | Defined in |
 |---|---|---|
 | The node (Ubuntu, Tailscale, k3s), the certificate timer for its tailnet name, its UDP buffer limits | | [`node/`](node/) (Ansible), [#2](../../issues/2) |
+| The daily drift check: the cluster against the files last applied, and those against `main` | | [`node/roles/drift_check`](node/roles/drift_check/), [docs/operations.md](docs/operations.md#the-drift-check), [#37](../../issues/37) |
 | Monitoring stack (Helm release `kps`, kube-prometheus-stack) | `monitoring` | [`platform/monitoring/`](platform/monitoring/), [#3](../../issues/3) |
 | Node and platform alerts, the Node dashboard (release `cluster-health`) | `monitoring` | [`platform/cluster-health/`](platform/cluster-health/), [#7](../../issues/7) |
 | PriorityClasses (release `priority-classes`) | cluster-wide | [`platform/priority-classes/`](platform/priority-classes/), [#8](../../issues/8) |
@@ -74,7 +75,7 @@ CI (`.github/workflows/ci.yml`) runs `make check` on every pull request and on `
 ## Principles
 
 - **Adopt, don't reinstall.** Everything here already runs and holds data (Prometheus history, uptime-kuma's monitors, project databases). Each piece is brought under code with the same names and versions, and the first apply must change nothing.
-- **Changes are applied from a laptop, with admin access over SSH.** Ansible manages the node and Helmfile manages the cluster, and Helmfile runs on the node, so the admin kubeconfig never leaves it. No admin credential is stored in GitHub. CI only validates. The reasons are in [docs/decisions.md](docs/decisions.md), and how to apply a change is in [docs/operations.md](docs/operations.md).
+- **Changes are applied from a laptop, with admin access over SSH.** Ansible manages the node and Helmfile manages the cluster, and Helmfile runs on the node, so the admin kubeconfig never leaves it. No admin credential is stored in GitHub. CI only validates, and a daily check on the node reports when the cluster no longer matches `main`. The reasons are in [docs/decisions.md](docs/decisions.md), and how to apply a change is in [docs/operations.md](docs/operations.md).
 - **Nothing is exposed to the internet.** Web UIs are reached over the LAN or Tailscale, on NodePorts assigned per project. The exception is cubicle, served over HTTPS on the node's Tailscale name. People outside the tailnet get in only through Tailscale node sharing, and reach only the ports a project lists for them.
 - **Public, so nothing private.** No secrets, IP addresses, user names or tailnet names in this repository. Real values live in git-ignored files, cluster Secrets or GitHub Secrets.
 

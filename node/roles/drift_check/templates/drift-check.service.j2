@@ -1,0 +1,16 @@
+# {{ ansible_managed }} (node/roles/drift_check)
+[Unit]
+Description=Check that the cluster matches the files last applied, and that main has nothing unapplied
+Wants=network-online.target
+After=network-online.target k3s.service
+
+[Service]
+Type=oneshot
+# The admin user: its kubeconfig, Helmfile and helm-diff are in its home (node/roles/node_tools, admin_kubeconfig).
+User={{ ansible_user_id }}
+ExecStart=/usr/local/bin/home-lab-drift-check
+# A diff renders kube-prometheus-stack, so stay out of the projects' way.
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true

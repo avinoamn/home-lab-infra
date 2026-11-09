@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }} (node/roles/drift_check)
+# The daily drift check (docs/operations.md, "The drift check"). As the admin user, it compares:
+#   1. the cluster with the files last applied from the laptop (helmfile diff, and kubectl diff of the projects'
+#      onboarding objects): this catches changes made by hand;
+#   2. those files with {{ drift_check_branch }} on GitHub, compared as text and never run: this catches merged
+#      changes that were not applied.
+# Only the files someone applied are ever rendered with the admin kubeconfig. Helmfile templates can run commands,
+# so rendering {{ drift_check_branch }} here would hand cluster-admin to whoever can change it (docs/decisions.md).
+# It prints a report (journalctl -u drift-check) and sends the result to the uptime-kuma push monitor whose URL is in
+# ~/.config/home-lab-infra/drift-push-url. It exits 1 when it found something or could not check.
+# Run daily by drift-check.timer; by hand from the laptop: scripts/drift.sh run
+set -uo pipefail
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+export KUBECONFIG="$HOME/.kube/config"
+state="$HOME/.local/state/home-lab-infra"
+push_file="$HOME/.config/home-lab-infra/drift-push-url"
+tarball="https://codeload.github.com/{{ drift_check_repo }}/tar.gz/refs/heads/{{ drift_check_branch }}"
+top="{{ drift_check_repo | basename }}-{{ drift_check_branch }}"
+started=$(date +%s) source_line=unknown
+
+mkdir -p "$state"
+exec 9>"$state/drift-check.lock"
+if ! flock -n 9; then
+  echo "another drift check is running" >&2
+  exit 0
+fi
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+findings=() count=0
+found() {
+  findings+=("$1")
+  count=$((count + 1))
+  echo "DRIFT: $1"
+}
+
+# A copy, so that an apply during the run can't change the files halfway (scripts/drift.sh record swaps the directory).
+if [ -f "$state/applied/helmfile.yaml.gotmpl" ]; then
+  cp -a "$state/applied" "$work/applied"
+  source_line=$(cat "$state/applied-source" 2>/dev/null || echo "unknown")
+  echo "== files last applied: $source_line"
+else
+  found "nothing recorded as applied: apply from main, or run scripts/drift.sh record"
+fi
+
+if [ -d "$work/applied" ]; then
+  # 1a. The Helm releases. Helm's repository list and cache stay in the work directory, as in scripts/helmfile.sh.
+  echo "== Helm releases"
+  rc=0
+  (cd "$work/applied" && HELM_REPOSITORY_CONFIG="$work/.helm/repositories.yaml" \
+    HELM_REPOSITORY_CACHE="$work/.helm/cache" \
+    helmfile --no-color diff --detailed-exitcode --suppress-secrets --context 3) >"$work/helmfile.out" 2>&1 || rc=$?
+  cat "$work/helmfile.out"
+  case $rc in
+    0) ;;
+    2)
+      # helm-diff names each object as "<namespace>, <name>, <kind> has changed:" (or been added / removed).
+      objects=$(grep -E '^[a-z0-9.-]+, [^,]+, .* has (changed|been added|been removed):$' "$work/helmfile.out" \
+        | awk -F', ' '{print $2}' | sort -u | head -n 5 | paste -sd ' ' -)
+      found "Helm releases differ from the files last applied (${objects:-see the journal})"
+      ;;
+    *) found "helmfile diff failed (exit $rc)" ;;
+  esac
+
+  # 1b. The projects' onboarding objects, as scripts/projects.sh diff does it.
+  echo "== project onboarding"
+  render() {
+    helm template onboarding "$work/applied/projects/chart" -f "$work/applied/projects/projects.yaml" \
+      --set-string only="$1"
+  }
+  if ! namespaces=$(render "" | awk '/^kind: Namespace$/ {f=1} f && /^  name:/ {print $2; f=0}'); then
+    found "the onboarding chart did not render"
+  fi
+  for ns in $namespaces; do
+    if ! kubectl get namespace "$ns" >/dev/null 2>&1; then
+      found "project $ns is listed but has no namespace"
+      continue
+    fi
+    rc=0
+    render "$ns" | kubectl diff -f - || rc=$?
+    case $rc in
+      0) echo "$ns: no changes" ;;
+      1) found "project $ns: onboarding objects differ from the files last applied" ;;   # diff exits 1 on changes
+      *) found "kubectl diff failed for project $ns (exit $rc)" ;;
+    esac
+  done
+
+  # 2. The same files on GitHub: downloaded, unpacked and compared as text, never run.
+  echo "== {{ drift_check_branch }} on GitHub against the files last applied"
+  mkdir "$work/{{ drift_check_branch }}"
+  if curl -fsSL --max-time 120 "$tarball" | tar -xzf - -C "$work/{{ drift_check_branch }}" --strip-components=1 \
+    "$top/helmfile.yaml.gotmpl" "$top/platform" "$top/projects"; then
+    rc=0
+    diff -rq "$work/{{ drift_check_branch }}" "$work/applied" >"$work/files.diff" 2>&1 || rc=$?
+    case $rc in
+      0) echo "no differences" ;;
+      1)
+        files=$(sed -E \
+          -e "s#^Files $work/{{ drift_check_branch }}/([^ ]+) and .*#\1#" \
+          -e "s#^Only in $work/{{ drift_check_branch }}/?([^:]*): (.*)#\1/\2 (not applied)#" \
+          -e "s#^Only in $work/applied/?([^:]*): (.*)#\1/\2 (not on {{ drift_check_branch }})#" \
+          -e 's#^/##' "$work/files.diff")
+        echo "$files"
+        found "{{ drift_check_branch }} differs from the files last applied: $(echo "$files" | head -n 3 | paste -sd ',' -)"
+        ;;
+      *) found "could not compare with {{ drift_check_branch }} (diff exit $rc)" ;;
+    esac
+  else
+    found "could not download {{ drift_check_branch }} from GitHub"
+  fi
+fi
+
+seconds=$(($(date +%s) - started))
+if [ "$count" -eq 0 ]; then
+  status=up msg="no drift (applied: $source_line)"
+else
+  status=down msg=$(printf '%s; ' "${findings[@]}")
+  msg=${msg%; }
+fi
+msg=${msg:0:400}
+echo "== result after ${seconds}s: $status: $msg"
+printf '%s %s: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" "$msg" >"$state/drift-report"
+
+# The push URL holds the monitor's token: it goes to curl through its config on stdin, never on a command line.
+if [ -s "$push_file" ]; then
+  url=$(head -n 1 "$push_file")
+  url=${url%%\?*}
+  if printf 'url = "%s"\n' "$url" | curl -fsS --max-time 30 -o /dev/null -K - -G \
+    --data-urlencode "status=$status" --data-urlencode "msg=$msg" --data-urlencode "ping=$((seconds * 1000))"; then
+    echo "sent to uptime-kuma"
+  else
+    echo "could not send the result to the uptime-kuma push monitor" >&2
+    exit 1
+  fi
+else
+  echo "no push URL in $push_file, so the result was not sent (scripts/drift.sh set-push-url)" >&2
+fi
+[ "$status" = up ]

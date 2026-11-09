@@ -4,6 +4,7 @@
 #   scripts/projects.sh diff                # read-only: what would change, for every project
 #   scripts/projects.sh diff <project>      # read-only, one project
 #   scripts/projects.sh apply <project>     # CHANGES THE CLUSTER (ask first): creates or updates that project's objects
+#                                           # and records the files as applied, for the drift check (scripts/drift.sh)
 # It never deletes anything: removing a project from the list leaves its objects in place (offboarding is
 # scripts/offboard-project.sh, docs/onboarding.md).
 # PROJECTS_FILE overrides the project list, e.g. for a throw-away test project. NODE_SSH_HOST as in helmfile.sh.
@@ -64,3 +65,8 @@ for ns in $(render "$only" | awk '/^kind: Namespace$/ {f=1} f && /^  name:/ {pri
   esac
 done
 EOF
+
+# The drift check compares the cluster with what was applied last (scripts/drift.sh). Not for a test list.
+if [ "$action" = apply ] && [ -z "${PROJECTS_FILE:-}" ]; then
+  bash scripts/drift.sh record
+fi

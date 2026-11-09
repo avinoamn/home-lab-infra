@@ -6,12 +6,17 @@
 #   scripts/helmfile.sh diff               # read-only: what would change
 #   scripts/helmfile.sh -l name=kps diff   # one release
 #   scripts/helmfile.sh apply              # CHANGES THE CLUSTER: applies the releases whose diff is not empty
+# After a successful apply (or sync) it records the files as applied, for the drift check (scripts/drift.sh).
 # Needs helmfile and the helm-diff plugin on the node (docs/operations.md, "Tools on the node").
 # The SSH host alias defaults to `computa`; override with NODE_SSH_HOST.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 host="${NODE_SSH_HOST:-computa}"
 args=$(printf '%q ' "$@")
+applying=false
+for a in "$@"; do
+  case "$a" in apply | sync) applying=true ;; esac
+done
 
 dir=$(tar -cf - helmfile.yaml.gotmpl platform projects | ssh "$host" 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
 case "$dir" in
@@ -24,3 +29,8 @@ trap 'ssh "$host" "rm -rf $dir"' EXIT
 # shellcheck disable=SC2029
 ssh "$host" "cd $dir && KUBECONFIG=~/.kube/config HELM_REPOSITORY_CONFIG=$dir/.helm/repositories.yaml \
   HELM_REPOSITORY_CACHE=$dir/.helm/cache ~/.local/bin/helmfile $args"
+
+# Also after an apply limited to some releases (-l): the drift check's own diff then shows any release left behind.
+if [ "$applying" = true ]; then
+  bash scripts/drift.sh record
+fi

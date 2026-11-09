@@ -32,6 +32,16 @@ Why this repository is set up the way it is. Each entry states the decision in b
 
 **No pull-based controller (Flux, Argo CD).** tickertape rejected one for its attack surface: a controller with cluster-admin rights that follows a git repository. Several projects sharing the cluster do not change that. On a 4-core node with 15 GiB of RAM, the controller would also compete with the projects for memory and CPU. Each project deploys itself with its own namespace-scoped account.
 
+**Drift is caught by a daily check on the node, which never renders `main` itself** ([#37](../../../issues/37), 2026-11-10). With changes applied by hand, the cluster can stop matching the repository: a merged change nobody applied, or a hand fix that never became a pull request. Running the diffs by hand catches both only when someone remembers. So a systemd timer on the node runs, as the admin user, `helmfile diff` and the projects' `kubectl diff` against a copy of the files last applied (left on the node by the apply scripts), and compares that copy with `main` on GitHub as text. Helmfile templates can run commands (its `exec` function), so rendering whatever is on `main` with the admin kubeconfig would give anyone who can change `main` cluster-admin, the same risk that ruled out a pull-based controller. Rendering only the files someone applied from the laptop keeps the check at the trust of an apply, and the text comparison still notices what is waiting on `main`. The result goes to an uptime-kuma push monitor, which notifies Discord on drift, on a failed check, and when results stop arriving (a missed heartbeat is down too). Rejected alternatives:
+
+- **A documented routine of running the diffs by hand:** it depends on remembering, which is the problem.
+- **A CronJob in the cluster:** helm-diff reads every release's Secrets, so the job would need a cluster-wide Secret reader inside the cluster; on the node the admin kubeconfig is already there.
+- **Flux or Argo CD in watch-only mode:** still a controller that reads every Secret, and still the CPU and memory cost on a small node.
+- **A Prometheus metric and alert:** node-exporter's textfile collector is off, so it would mean a `kps` upgrade and a host volume, and Prometheus could not tell a check that stopped running from one that passed without another rule.
+- **Posting to the Discord webhook directly:** a second copy of the webhook on the node, and nothing would notice a check that stopped running.
+
+The node itself and the Tailscale policy are not checked: the playbook's check mode needs the sudo password, and reading the policy would need a Tailscale API key on the node.
+
 ## The platform contract
 
 The rules themselves are in [platform.md](platform.md). These entries say why they are what they are.

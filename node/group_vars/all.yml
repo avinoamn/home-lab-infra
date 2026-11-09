@@ -42,3 +42,10 @@ tailscale_cert_min_validity: 336h
 # The most a UDP socket may ask for, each way (node/roles/udp_buffers): what LiveKit asks for (defaultUDPBufferSize in
 # LiveKit's mediatransportutil, v1.13.11). It warns below 5,000,000.
 udp_buffer_max_bytes: 16777216
+
+# The daily drift check (node/roles/drift_check): the public repository and branch it compares the files last applied
+# with, and when it runs (UTC; the timer adds up to 10 minutes). The uptime-kuma push monitor expects a result at
+# least every 26 hours (docs/operations.md, "Monitors"), so a run that stops reporting is noticed within a day.
+drift_check_repo: avinoamn/home-lab-infra
+drift_check_branch: main
+drift_check_time: "07:23:00"
