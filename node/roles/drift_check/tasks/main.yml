@@ -1,0 +1,34 @@
+# The daily drift check (docs/operations.md, "The drift check"): a systemd timer runs a script as the admin user,
+# with the admin kubeconfig and helm-diff in its home, so no credential leaves the node. It compares the cluster with
+# the files last applied from the laptop, and those files with main on GitHub, and reports to an uptime-kuma push
+# monitor. The push monitor's URL is set by hand (scripts/drift.sh set-push-url), never by the playbook.
+
+- name: The script that checks for drift
+  become: true
+  ansible.builtin.template:
+    src: home-lab-drift-check.sh.j2
+    dest: /usr/local/bin/home-lab-drift-check
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Its systemd service and daily timer
+  become: true
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [drift-check.service, drift-check.timer]
+  register: drift_check_units
+
+# A check run can't enable a timer that isn't installed yet, so it skips this step until the units exist.
+- name: The timer is enabled and running
+  become: true
+  when: not (ansible_check_mode and drift_check_units is changed)
+  ansible.builtin.systemd_service:
+    name: drift-check.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ drift_check_units is changed }}"

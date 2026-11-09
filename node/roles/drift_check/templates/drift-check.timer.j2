@@ -1,0 +1,13 @@
+# {{ ansible_managed }} (node/roles/drift_check)
+[Unit]
+Description=Daily drift check of the cluster against the repository
+
+[Timer]
+# UTC: morning in Europe, so a finding arrives when someone is awake to act on it.
+OnCalendar=*-*-* {{ drift_check_time }}
+RandomizedDelaySec=10min
+# A run missed while the node was off happens at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -11,6 +11,7 @@ All admin work runs on the node over SSH, with the admin kubeconfig that lives t
 | `scripts/kc-admin.sh <kubectl args>` | `kubectl` as cluster admin, on the node |
 | `scripts/projects.sh diff [project]`, `apply <project>` | The projects' namespaces and deploy accounts: renders `projects/chart` on the node and runs `kubectl diff` or `kubectl apply` ([onboarding.md](onboarding.md)) |
 | `scripts/helmfile.sh <helmfile args>` | Helmfile on the node. It copies `helmfile.yaml.gotmpl`, `platform/` and `projects/` to a temporary directory there, runs, and removes it. Helm's repository list and cache stay in that directory, so the node's own Helm setup is not touched. |
+| `scripts/drift.sh run`, `record`, `set-push-url` | The daily drift check: run it now, record the checkout as applied, store its push monitor's URL ("The drift check" below) |
 
 Read-only commands (`get`, `describe`, `logs`, `helmfile diff`) are always safe. Anything that changes the cluster is a planned change.
 
@@ -28,7 +29,7 @@ The node's Ansible playbook installs them at the pinned versions (`node/group_va
 
 ## The node
 
-The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools, the admin kubeconfig, the certificate timer for the node's tailnet name, and bigger UDP socket buffers for cubicle's LiveKit (`node/roles/udp_buffers`: `net.core.rmem_max` and `wmem_max` at 16 MiB, what LiveKit asks for per socket; Ubuntu's 208 KiB made it warn at every start and could drop video in bursts. A change takes effect for LiveKit when it restarts). Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
+The server is described as Ansible in `node/`: Ubuntu's packages and automatic security updates, Tailscale, k3s, the admin tools, the admin kubeconfig, the certificate timer for the node's tailnet name, the daily drift check ("The drift check" below), and bigger UDP socket buffers for cubicle's LiveKit (`node/roles/udp_buffers`: `net.core.rmem_max` and `wmem_max` at 16 MiB, what LiveKit asks for per socket; Ubuntu's 208 KiB made it warn at every start and could drop video in bursts. A change takes effect for LiveKit when it restarts). Every version is pinned in `node/group_vars/all.yml`. The playbook runs from the tools image, over SSH with your `~/.ssh` (host alias `computa`), and asks for the admin user's sudo password at the start. Run it from your own terminal: it reads the password without showing it.
 
 ```sh
 scripts/node.sh check    # read-only: what a run would change (--check --diff). Expect changed=0.
@@ -70,6 +71,7 @@ For a new or rebuilt server (disaster recovery is [#9](../../../issues/9)):
    - `scripts/helmfile.sh apply`
    - `scripts/projects.sh apply <project>` for each project
    - the tailnet name's certificate: `sudo systemctl start tailscale-cert.service` on the node, once the owning project's namespace exists (below)
+   - the drift check: `scripts/drift.sh set-push-url` with the push monitor's URL, then `scripts/drift.sh run` ("The drift check" below). The applies above recorded what the cluster runs.
 6. Projects deploy themselves again. Their data comes back from backups ([#9](../../../issues/9)).
 
 ### The tailnet name's certificate
@@ -106,10 +108,40 @@ A failed run leaves the old Secret in place. If it fails for two weeks, the cert
    scripts/helmfile.sh apply
    ```
 
-   `apply` diffs first and upgrades only the releases that changed. A release with an empty diff is not touched (no new Helm revision).
-4. Check the result (for the monitoring stack, see "Checking that it works" below).
+   `apply` diffs first and upgrades only the releases that changed. A release with an empty diff is not touched (no new Helm revision). Then it records the files on the node as what the cluster runs, for the drift check below (`scripts/projects.sh apply` does the same).
+4. Check the result (for the monitoring stack, see "Checking that it works" below), and run `scripts/drift.sh run`: it should report no drift.
 
-To undo an applied change, revert the pull request and apply again. `helm rollback` also works in an emergency (`ssh <node> 'KUBECONFIG=~/.kube/config helm rollback kps <revision> -n monitoring'`), but then the cluster no longer matches `main` until the files are fixed.
+To undo an applied change, revert the pull request and apply again. `helm rollback` also works in an emergency (`ssh <node> 'KUBECONFIG=~/.kube/config helm rollback kps <revision> -n monitoring'`), but then the cluster no longer matches `main` until the files are fixed, and the drift check reports it every day until then.
+
+### The drift check
+
+Changes are applied by hand, so the cluster can stop matching the repository: a merged pull request nobody applied, or a fix made by hand during an incident that never became a pull request. A daily check on the node notices both, and reports to uptime-kuma, which notifies Discord.
+
+- **`drift-check.timer`** runs `drift-check.service` daily (around 07:23 UTC, and at boot if a run was missed). It runs `/usr/local/bin/home-lab-drift-check` as the admin user, with the admin kubeconfig and helm-diff from that user's home, so no credential leaves the node.
+- **What it compares:**
+  1. The cluster with the files last applied: `helmfile diff` for the releases and `kubectl diff` for the projects' onboarding objects, like `scripts/helmfile.sh diff` and `scripts/projects.sh diff`. This catches changes made by hand.
+  2. Those files with `main` on GitHub: it downloads `main`'s `helmfile.yaml.gotmpl`, `platform/` and `projects/`, and compares them as text. This catches changes that were merged but not applied.
+- **The files last applied** are a copy on the node (`~/.local/state/home-lab-infra/applied`, with the commit in `applied-source`). `scripts/helmfile.sh apply`, `scripts/projects.sh apply` and `scripts/offboard-project.sh` replace it after they succeed. The check only ever renders this copy, never `main` itself: Helmfile templates can run commands, so rendering whatever is on `main` with the admin kubeconfig would give anyone who can change `main` cluster-admin ([decisions.md](decisions.md), "Applying changes").
+- **The result** goes to the uptime-kuma push monitor "platform: drift check" ("Monitors" below): up with "no drift", or down with what it found, for example `main differs from the files last applied: platform/monitoring/values.yaml`. The monitor also goes down when no result arrives for 26 hours, so a check that stops running is noticed too. The full report is in the journal; Secret values are left out of the diffs.
+- **Set up by the node playbook** (`node/roles/drift_check`, the repository and time in `node/group_vars/all.yml`). Two steps are by hand, once: create the push monitor in uptime-kuma, and store its URL on the node. The URL holds the monitor's token, so it never goes into the repository:
+
+```sh
+scripts/drift.sh set-push-url    # paste the push URL from the monitor's page (input hidden); stored in the admin user's home
+scripts/drift.sh run             # run the check now and print the report (read-only; sends the result)
+scripts/drift.sh record          # record this checkout as applied, when it was applied some other way (changes no cluster object)
+ssh computa 'systemctl list-timers drift-check.timer'                  # when it runs next
+ssh computa 'journalctl -u drift-check.service -n 60 --no-pager'      # the last report
+```
+
+**When it reports drift:**
+
+- **`main differs from the files last applied`:** a merged change is waiting. Apply it ("Applying a change" above). If you applied from a branch or with local changes, apply again from an up-to-date `main`.
+- **`Helm releases differ` or `project <name>: onboarding objects differ`:** the cluster changed by hand, or an apply covered only some releases (`-l`). `scripts/helmfile.sh diff` or `scripts/projects.sh diff <project>` shows the difference. Either put the hand change into the files (a pull request, then apply), or apply the files to undo it.
+- **`helmfile diff failed`, `could not download main`:** the check itself failed; the journal has the error.
+
+After fixing it, run `scripts/drift.sh run` so the monitor goes back up without waiting a day.
+
+**Not covered:** the node itself (`scripts/node.sh check` needs the sudo password, so run it yourself after node changes) and the Tailscale policy (checking it would need a Tailscale API key on the node; paste the file unchanged every time, "Tailscale policy" below).
 
 ## The monitoring stack
 
@@ -258,7 +290,7 @@ Helm release `uptime-kuma` in namespace `tools`, at `http://<node>:30001`. It ch
 
 Monitors are set up by hand in uptime-kuma's UI and stored in its database, not in this repository (see [decisions.md](decisions.md), "uptime-kuma"). This table is the reference, so they can be rebuilt from it. Keep it in step with the UI.
 
-Every monitor is of type HTTP(s): checked every 60 seconds, marked down after 2 failed retries (60 seconds apart), and sent to the notification "Discord (home-lab alerts)".
+Every monitor in this table is of type HTTP(s): checked every 60 seconds, marked down after 2 failed retries (60 seconds apart), and sent to the notification "Discord (home-lab alerts)".
 
 | Name | URL | Accepted codes | Notes |
 |---|---|---|---|
@@ -270,6 +302,12 @@ Every monitor is of type HTTP(s): checked every 60 seconds, marked down after 2 
 | platform: Kubernetes API | `https://kubernetes.default.svc.cluster.local/readyz` | 200-299, 401 | "Ignore TLS/SSL errors" on. k3s turns off anonymous access, so `/readyz` answers 401 without a login, which still proves the API server answers. The cluster's CA is not in uptime-kuma's trust store. |
 
 The checks use the in-cluster Service names, so they test the application, not the NodePort path from outside. A project that wants its UI watched adds a row here and the monitor in the UI when it is onboarded.
+
+One monitor is of type Push: the node's drift check sends it its result ("The drift check" above).
+
+| Name | Heartbeat interval | Retries | Notes |
+|---|---|---|---|
+| platform: drift check | 93600 seconds (26 hours) | 0 | Down at once when the check reports drift or fails, or when no result arrives for 26 hours (it runs daily, plus up to 10 minutes). Its push URL is on the node (`scripts/drift.sh set-push-url`); a new monitor has a new URL, so store it again after rebuilding the monitor. |
 
 **The notification** "Discord (home-lab alerts)" (type Discord, "Default enabled" on, so new monitors get it) posts to the same channel as Alertmanager. Its webhook URL is in uptime-kuma's database only.
 

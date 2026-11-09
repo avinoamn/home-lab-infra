@@ -31,4 +31,6 @@ if [ "${CONFIRM_DELETE:-}" != "$project" ]; then
   exit 0
 fi
 "$kca" delete namespace "$project" --wait=true
+# The list without the project is now what the cluster runs (the drift check compares the two, scripts/drift.sh).
+bash scripts/drift.sh record
 echo "deleted namespace $project. Remove ~/.kube/$project and the project's GitHub Environment credentials too."
