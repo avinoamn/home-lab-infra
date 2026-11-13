@@ -152,6 +152,7 @@ A project that needs `hostNetwork` or `hostPort` lists each port here, and gets 
 
 | Port | Protocol | Project | Reason |
 |---|---|---|---|
+| 7777 | UDP | cubicle | The Godot version's game server (ENet). A `hostPort` with `hostIP` set to the node's Tailscale address, not the host network, so it answers on that address only; game clients connect to it directly |
 | 7880 | TCP | cubicle | LiveKit's signaling (WebSocket). LiveKit runs on the host network for its media ports, so this one is on the host too; browsers reach it through Traefik on the node's tailnet name, path `/rtc` |
 | 7881 | TCP | cubicle | LiveKit's WebRTC media over TCP, when UDP is blocked. Browsers connect to it directly on the node's Tailscale address |
 | 7882 | UDP | cubicle | LiveKit's WebRTC media (voice and face video), all on one UDP port. Browsers connect to it directly on the node's Tailscale address |

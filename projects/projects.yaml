@@ -41,12 +41,14 @@ projects:
     hosts: ["<node>.<tailnet>.ts.net"]
     # LiveKit runs on the host network for its media ports (the registry's host ports, with the reason).
     podSecurity: privileged
-    # Friends open https://<node>.<tailnet>.ts.net (443; /rtc reaches LiveKit's signaling through Traefik) and send
-    # media straight to LiveKit (7881/TCP, 7882/UDP). Not 7880, SSH, the API or the platform's UIs.
-    shared: ["tcp:443", "tcp:7881", "udp:7882"]
-    # Estimated from cubicle's design (section 1.7), not yet measured: the cubicle server 100m / 128Mi (limit 256Mi),
-    # LiveKit 500m / 512Mi (limit 1Gi). Room for a RollingUpdate of the server (LiveKit uses Recreate) and one stray
-    # pod. No volumes: all its state is in memory.
+    # Friends open https://<node>.<tailnet>.ts.net (443; /rtc reaches LiveKit's signaling through Traefik), play on
+    # the Godot version's game server (7777/UDP) and send media straight to LiveKit (7881/TCP, 7882/UDP). Not 7880,
+    # SSH, the API or the platform's UIs.
+    shared: ["tcp:443", "udp:7777", "tcp:7881", "udp:7882"]
+    # From cubicle's deploy/, while its TypeScript and Godot versions run side by side (its design, 1.8): the cubicle
+    # server 100m / 128Mi (limit 256Mi), LiveKit 250m / 256Mi (limit 512Mi), the Godot API 50m / 96Mi (limit 192Mi)
+    # and game server 200m / 256Mi (limit 512Mi). That is 600m / 736Mi (limits 1472Mi) in 4 pods, with room for a
+    # RollingUpdate of both web servers at once (the others use Recreate). No volumes: all its state is in memory.
     quota:
       requests.cpu: "1"
       requests.memory: 1Gi
