@@ -4,8 +4,9 @@
 k3s_version: v1.36.2+k3s1
 k3s_install_script_sha256: 46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad
 
-# Tailscale, from Tailscale's apt repository.
-tailscale_version: 1.102.4
+# Tailscale, from Tailscale's apt repository. Its own auto-update is kept off (node/roles/tailscale), so the node
+# stays at this version until it is changed here.
+tailscale_version: 1.104.5
 tailscale_apt_distro: noble
 # The repository's signing key, pinned: a changed key fails the download instead of being trusted silently.
 tailscale_keyring_sha256: 3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39

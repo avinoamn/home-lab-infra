@@ -56,6 +56,15 @@ Upgrade one minor version at a time ([decisions.md](decisions.md), "The platform
 4. After merge, when the projects are quiet: `scripts/node.sh apply`. The install script replaces the binary and restarts k3s. Running pods keep running during the restart, but the API is down for a minute.
 5. Check the node is Ready, every pod is running, and the dashboards and uptime-kuma are green ("Checking that it works" below).
 
+### Upgrading Tailscale
+
+Tailscale's own auto-update is off on the node (the playbook keeps it off), so the node runs `tailscale_version` from `node/group_vars/all.yml` until it is changed there. Upgrade every month or two, or when Tailscale publishes a security bulletin:
+
+1. Read the [changelog](https://tailscale.com/changelog) since the pinned version, especially anything about `tailscale cert`, node sharing or the Linux client.
+2. On a branch, set `tailscale_version`. `ssh computa 'apt-cache policy tailscale'` lists the versions the repository offers.
+3. `scripts/node.sh check` should show only the install step. After merge: `scripts/node.sh apply`. tailscaled restarts, so the node drops off the tailnet for a few seconds (cubicle's players reconnect).
+4. Check `ssh computa 'tailscale version'`, that cubicle's page loads over HTTPS, and that uptime-kuma is green.
+
 k3s's certificates are valid for a year and are renewed only when k3s starts within 120 days of their expiry. An upgrade restarts k3s, so upgrading regularly also renews them. "The API certificate" below covers the alert if that doesn't happen.
 
 ### Installing a node from scratch
