@@ -1,5 +1,6 @@
-# Tailscale from its apt repository, at the pinned version. Joining the tailnet (`tailscale up`), tagging the node
-# and disabling its key expiry are done by hand once (docs/operations.md, "Installing a node from scratch").
+# Tailscale from its apt repository, at the pinned version, with its own auto-update off. Joining the tailnet
+# (`tailscale up`), tagging the node and disabling its key expiry are done by hand once (docs/operations.md,
+# "Installing a node from scratch").
 
 - name: Tailscale's signing key is present
   become: true
@@ -39,3 +40,18 @@
     name: tailscaled
     enabled: true
     state: started
+
+# tailscaled can update itself (`tailscale set --auto-update`). It did on 2026-11-07, and the pin above would then
+# downgrade it. Upgrades go through tailscale_version instead (docs/operations.md, "Upgrading Tailscale").
+- name: Read Tailscale's auto-update setting
+  ansible.builtin.command: tailscale get auto-update
+  register: tailscale_auto_update
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Tailscale's own auto-update is off
+  become: true
+  ansible.builtin.command: tailscale set --auto-update=false
+  when: (tailscale_auto_update.stdout | default('') | trim) != 'false'
+  changed_when: true
